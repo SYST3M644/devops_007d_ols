@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: categorias
+  datasource:
+    url: jdbc:mysql://mysql:3306/bd_categorias?useSSL=false&serverTimezone=America/Santiago&allowPublicKeyRetrieval=true
+    username: root
+    password: rootpass
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+server:
+  port: 8082
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+  instance:
+    prefer-ip-address: true
+    hostname: categorias
+    instance-id: categorias:${server.port}
+
+logging:
+  level:
+    cl.syst3m64.categorias: DEBUG
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
