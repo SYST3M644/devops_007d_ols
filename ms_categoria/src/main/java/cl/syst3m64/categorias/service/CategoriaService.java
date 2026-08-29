@@ -18,7 +18,7 @@ public class CategoriaService {
     private final CategoriaRepository categoriaRepository;
 
     public List<Categoria> obtenerTodas() {
-        log.info("[CategoriaService] Consultando todas las categorías");
+        log.info("[CategoriaService] Consultando todas las categorías disponibles");
         return categoriaRepository.findAll();
     }
 
@@ -27,27 +27,27 @@ public class CategoriaService {
         return categoriaRepository.findAllNombres(nombre);
     }
 
-    public Categoria guardar(Categoria cat) {
-        log.info("[CategoriaService] Creando categoría: {}", cat.getNombre());
-        Categoria guardada = categoriaRepository.save(cat);
-        log.info("[CategoriaService] Categoría creada con ID: {}", guardada.getId());
-        return guardada;
+    public Categoria guardar(Categoria categoria) {
+        log.info("[CategoriaService] Creando categoría: {}", categoria.getNombre());
+        Categoria guardadas = categoriaRepository.save(categoria);
+        log.info("[CategoriaService] Categoría creada con ID: {}", guardadas.getId());
+        return guardadas;
     }
 
     public Optional<Categoria> obtenerPorId(Long id) {
         log.info("[CategoriaService] Buscando categoría con ID: {}", id);
         Optional<Categoria> resultado = categoriaRepository.findById(id);
         if (resultado.isEmpty()) {
-            log.warn("[CategoriaService] Categoría con ID {} no encontrada", id);
+            log.warn("[CategoriaService] Categoría con ID {} no encontrada con el id: ", id);
         }
         return resultado;
     }
 
-    public Optional<Categoria> actualizar(Long id, Categoria cat) {
+    public Optional<Categoria> actualizar(Long id, Categoria categoria) {
         log.info("[CategoriaService] Actualizando categoría ID: {}", id);
         return categoriaRepository.findById(id).map(existing -> {
-            existing.setNombre(cat.getNombre());
-            existing.setDescripcion(cat.getDescripcion());
+            existing.setNombre(categoria.getNombre());
+            existing.setDescripcion(categoria.getDescripcion());
             Categoria actualizada = categoriaRepository.save(existing);
             log.info("[CategoriaService] Categoría actualizada: {}", actualizada.getNombre());
             return actualizada;
