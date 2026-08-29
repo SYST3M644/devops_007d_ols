@@ -31,77 +31,77 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/categorias")
+@RequestMapping("/api/category")
 @RequiredArgsConstructor
-@Tag(name = "Categorías", description = "Operaciones CRUD del catálogo de categorías")
+@Tag(name = "Category", description = "Operaciones CRUD del catálogo de category")
 public class CategoriaController {
     private final CategoriaService categoriaService;
 
-    @Operation(summary = "Listar todas las categorías", description = "Retorna la lista completa de categorías")
+    @Operation(summary = "Listar todas las category", description = "Retorna la lista completa de category")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Lista de categorías retornada correctamente",
+        @ApiResponse(responseCode = "200", description = "Lista de category retornada correctamente",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = Categoria.class)))
     })
     @GetMapping
     public List<Categoria> obtenerTodas() {
-        log.info("[CategoriaController] GET /api/categorias");
+        log.info("[CategoryController] GET /api/category");
         return categoriaService.obtenerTodas();
     }
 
-    @Operation(summary = "Buscar categorías por nombre", description = "Filtra categorías por nombre exacto")
+    @Operation(summary = "Buscar category por nombre", description = "Filtra category por nombre exacto")
     @GetMapping("/nombres")
     public List<Categoria> obtenerNombresCat(
-        @Parameter(description = "Nombre de la categoría a buscar", example = "Nuevo") @RequestParam String nombre) {
-        log.info("[CategoriaController] GET /api/categorias/nombres?nombre={}", nombre);
+        @Parameter(description = "Nombre de la category a buscar", example = "Nuevo") @RequestParam String nombre) {
+        log.info("[CategoryController] GET /api/category/nombres?nombre={}", nombre);
         return categoriaService.obtenerNombres(nombre);
     }
 
-    @Operation(summary = "Obtener categoría por ID", description = "Retorna la categoría con el ID indicado")
+    @Operation(summary = "Obtener category por ID", description = "Retorna la category con el ID indicado")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Categoría encontrada",
+        @ApiResponse(responseCode = "200", description = "Category encontrada",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = Categoria.class))),
-        @ApiResponse(responseCode = "404", description = "Categoría no encontrada",
+        @ApiResponse(responseCode = "404", description = "Category no encontrada",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE))
     })
     @GetMapping("/{id}")
     public ResponseEntity<Categoria> obtenerId(
-        @Parameter(description = "ID de la categoría", example = "1", required = true) @PathVariable Long id) {
-        log.info("[CategoriaController] GET /api/categorias/{}", id);
+        @Parameter(description = "ID de la category", example = "1", required = true) @PathVariable Long id) {
+        log.info("[CategoryController] GET /api/category/{}", id);
         return categoriaService.obtenerPorId(id)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
 
-    @Operation(summary = "Crear nueva categoría", description = "Crea una categoría con los datos proporcionados")
+    @Operation(summary = "Crear nueva category", description = "Crea una category con los datos proporcionados")
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Categoría creada correctamente",
+        @ApiResponse(responseCode = "201", description = "Category creada correctamente",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = Categoria.class))),
         @ApiResponse(responseCode = "400", description = "Error de validación: datos inválidos",
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE))
     })
     @PostMapping
     public ResponseEntity<Categoria> crear(@Valid @RequestBody Categoria cat) {
-        log.info("[CategoriaController] POST /api/categorias - nombre: {}", cat.getNombre());
+        log.info("[CategoryController] POST /api/category - nombre: {}", cat.getNombre());
         return ResponseEntity.status(HttpStatus.CREATED).body(categoriaService.guardar(cat));
     }
 
-    @Operation(summary = "Actualizar categoría", description = "Actualiza los datos de la categoría con el ID indicado")
+    @Operation(summary = "Actualizar category", description = "Actualiza los datos de la category con el ID indicado")
     @PutMapping("/{id}")
     public ResponseEntity<Categoria> actualizar(@PathVariable Long id, @Valid @RequestBody Categoria cat) {
-        log.info("[CategoriaController] PUT /api/categorias/{}", id);
+        log.info("[CategoryController] PUT /api/category/{}", id);
         return categoriaService.actualizar(id, cat)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
 
-    @Operation(summary = "Eliminar categoría", description = "Elimina la categoría con el ID indicado")
+    @Operation(summary = "Eliminar category", description = "Elimina la category con el ID indicado")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> eliminar(@PathVariable Long id) {
-        log.info("[CategoriaController] DELETE /api/categorias/{}", id);
+        log.info("[CategoryController] DELETE /api/category/{}", id);
         if (categoriaService.obtenerPorId(id).isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Categoria no encontrada con ID: " + id);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Category no encontrada con ID: " + id);
         }
         categoriaService.eliminar(id);
-        return ResponseEntity.ok("Categoria eliminada exitosamente");
+        return ResponseEntity.ok("Category eliminada exitosamente");
     }
 }

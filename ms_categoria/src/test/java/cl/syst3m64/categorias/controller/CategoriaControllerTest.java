@@ -24,7 +24,7 @@ import cl.syst3m64.categorias.model.Categoria;
 import cl.syst3m64.categorias.service.CategoriaService;
 
 @WebMvcTest(CategoriaController.class)
-@DisplayName("Tests del CategoriaController con MockMvc")
+@DisplayName("Tests del CategoryController con MockMvc")
 public class CategoriaControllerTest {
 
     @Autowired
@@ -36,12 +36,12 @@ public class CategoriaControllerTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    @DisplayName("GET /api/categorias debe retornar 200 con la lista de categorías")
+    @DisplayName("GET /api/category debe retornar 200 con la lista de category")
     void listar_debeRetornar200ConListaDeCategorias() throws Exception {
         Categoria cat = new Categoria(1L, "Ciencia Ficción", "Libros de CF");
         when(categoriaService.obtenerTodas()).thenReturn(List.of(cat));
 
-        mockMvc.perform(get("/api/categorias")
+        mockMvc.perform(get("/api/category")
             .contentType(MediaType.APPLICATION_JSON))
             .andDo(print())
             .andExpect(status().isOk())
@@ -50,13 +50,13 @@ public class CategoriaControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/categorias debe retornar 201 con datos válidos")
+    @DisplayName("POST /api/category debe retornar 201 con datos válidos")
     void crear_debeRetornar201_cuandoDatosValidos() throws Exception {
         Categoria request = new Categoria(null, "Terror", "Libros de terror");
         Categoria response = new Categoria(1L, "Terror", "Libros de terror");
         when(categoriaService.guardar(any(Categoria.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/categorias")
+        mockMvc.perform(post("/api/category")
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isCreated())

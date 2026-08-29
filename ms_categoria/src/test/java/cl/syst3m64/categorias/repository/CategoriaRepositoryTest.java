@@ -19,7 +19,7 @@ import cl.syst3m64.categorias.model.Categoria;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@DisplayName("Test del repositorio CategoriaRepository en memoria")
+@DisplayName("Test del repositorio CategoryRepository en memoria")
 public class CategoriaRepositoryTest {
 
     @Autowired
@@ -37,7 +37,7 @@ public class CategoriaRepositoryTest {
     }
 
     @Test
-    @DisplayName("findAll() retorna todas las categorías persistidas")
+    @DisplayName("findAll() retorna todas las category persistidas")
     void findAll_debeRetornarTodasLasCategorias() {
         List<Categoria> resultado = categoriaRepository.findAll();
 
@@ -47,7 +47,7 @@ public class CategoriaRepositoryTest {
     }
 
     @Test
-    @DisplayName("findById() retorna la categoría cuando existe")
+    @DisplayName("findById() retorna la category cuando existe")
     void findById_debeRetornarCategoria_cuandoExiste() {
         Optional<Categoria> resultado = categoriaRepository.findById(categoriaEjemplo.getId());
 
@@ -64,7 +64,7 @@ public class CategoriaRepositoryTest {
     }
 
     @Test
-    @DisplayName("findAllNombres() retorna categorías que coinciden con el nombre")
+    @DisplayName("findAllNombres() retorna category que coinciden con el nombre")
     void findAllNombres_debeRetornarCategoriasConNombreCoincidente() {
         List<Categoria> resultado = categoriaRepository.findAllNombres("Ciencia Ficción");
 
