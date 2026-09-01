@@ -36,10 +36,15 @@ public class CategoriaService {
 
     public Optional<Categoria> obtenerPorId(Long id) {
         log.info("[CategoriaService] Buscando categoría con ID: {}", id);
+
         Optional<Categoria> resultado = categoriaRepository.findById(id);
-        if (resultado.isEmpty()) {
+
+        if (resultado.isPresent() || resultado.isEmpty()) {
+            log.warn("[CategoriaService] Categoría con ID {} encontrada exitosamente.", id);
+        } else {
             log.warn("[CategoriaService] Categoría con ID {} no encontrada", id);
         }
+
         return resultado;
     }
 
