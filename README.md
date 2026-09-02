@@ -1,7 +1,16 @@
 "Parcial n° 1 DevOps"
 Integrantes : Manuel Mora y Abel Aylas
 
-Microservicio : Ms_categorias.
+Microservicio : 
+
+Qué es: microservicio REST que administra el catálogo de categorías de libros. Se registra en Eureka para que los demás microservicios lo descubran.
+Stack: Java 17 · Spring Boot 4.0.6 · Spring Data JPA · MySQL · Eureka · Swagger · Maven · Docker · Puerto 8082
+Arquitectura: por capas — Controller → Service → Repository → MySQL, con un manejador global de errores que unifica las respuestas de fallo.
+Ejecución: ./mvnw spring-boot:run → http://localhost:8082
+Documentación de la API: http://localhost:8082/swagger-ui.html
+Pruebas: ./mvnw test (11 pruebas de repositorio, servicio y controlador)
+Extras: al arrancar carga cuatro categorías por defecto (Nuevo, Usado, Reparado, Digital) si la base está vacía.
+
 
 Estrategia de ramificacion en este proyecto: Este microservicio "Ms_categoria" usa GitFlow como estrategia de ramificacion, por lo cual esta compuesta por ramas lo mostramos a continuacion:
 
@@ -58,7 +67,7 @@ git pull origin develop // actualizara los cambios desde el repositorio en git h
 
 (hicimos 2 feature por lo cual son los mismos comandos solo cambia el nombre de la rama feature y su funcionalidad)
 
-// Hotfix
+//Rama main -> hotfix
 
 git checkout main // Nos posicionamos en la rama main
 
@@ -70,6 +79,7 @@ git commit -m "fix: Se arregla problema nullPoinerException" // Le asignamos un 
 
 git push -u origin  hotfix/arreglos-null // subimos los cambios 
 
+<<<<<<< HEAD
 base: main <- compare:  hotfix/arreglos-null (revisamos y mergeamos hacia main)
 
 **Papeline CI (Git actions):
@@ -90,3 +100,18 @@ se soluciono implementando una rama feature (nueva mejora) llamada:
 fix/conflicto-merge-categoriaservice cuya mejora implementada , se encargo de solucionar el error, dando exitosamente el funcionamiento del papeline.
 
 Importante : el papeline no se hizo sobre main, porque primero como equipo validamos que todo codigo, sea mejora (nueva funcionalidad) sea validada antes de un release hacia main (produccion)
+=======
+base: main/master <- compare:  hotfix/arreglos-null (revisamos y mergeamos hacia main)
+
+//Tag
+Ocupamos tag para el control de versiones en el repositorio empezamos con la version v1.0 subiendo el proyecto base 
+y actualizamos el tag a la v1.1 cuando hicimos un hotfix de bug critico en el codigo
+
+//Comandos de uso en Tag:
+git checkout develop
+git pull origin develop
+git checkout -b docs/documentacion-readme
+git add .
+git commit -m "docs: Se agrega documentacion del microservicio ms_categoria"
+git push -u origin docs/documentacion-readme
+>>>>>>> 2fa73571ede2eb672a53182dd4aba94151d74c4a
