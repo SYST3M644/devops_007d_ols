@@ -1,0 +1,36 @@
+name: Pipeline de ms_categoria
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Verifica contenido del repositorio
+      run: |
+        echo "Este es el contenido del repositorio"
+        tree
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v6
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+    - name: Compilando y Ejecutando Test Unitarios
+      run: mvn -B package --file ms_categoria/pom.xml
+
+    - name: Resultado
+      run: |
+        echo "Build y Pruebas Unitarias Exitosas"
+
+
