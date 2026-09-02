@@ -79,7 +79,7 @@ git commit -m "fix: Se arregla problema nullPoinerException" // Le asignamos un 
 
 git push -u origin  hotfix/arreglos-null // subimos los cambios 
 
-<<<<<<< HEAD
+
 base: main <- compare:  hotfix/arreglos-null (revisamos y mergeamos hacia main)
 
 **Papeline CI (Git actions):
@@ -95,13 +95,12 @@ Cargando el microservicio con sus dependecias,pom.xml, ademas se configura Java 
 Se verifica todo el contenido del microservicio , mostrando lo que compone su carpeta ordenadamente.
 Lo mas importante del papeline implementado, permite ejecutar todos los test unitarios del microservicio, copilando el proyecto, validando que no ocurra errores facilitando un future release hacia produccion.
 
-***En nuestro proceso se encontro un error*** -> cuando se ejecuto el papeline ocurrio un error de copilacion por ende sus pruebas unitarias no corrieron, cuyo error fue una falla sintaxis.
+En nuestro proceso se encontro un error -> cuando se ejecuto el papeline ocurrio un error de copilacion por ende sus pruebas unitarias no corrieron, cuyo error fue una falla sintaxis.
 se soluciono implementando una rama feature (nueva mejora) llamada: 
 fix/conflicto-merge-categoriaservice cuya mejora implementada , se encargo de solucionar el error, dando exitosamente el funcionamiento del papeline.
 
 Importante : el papeline no se hizo sobre main, porque primero como equipo validamos que todo codigo, sea mejora (nueva funcionalidad) sea validada antes de un release hacia main (produccion)
-=======
-base: main/master <- compare:  hotfix/arreglos-null (revisamos y mergeamos hacia main)
+
 
 //Tag
 Ocupamos tag para el control de versiones en el repositorio empezamos con la version v1.0 subiendo el proyecto base 
@@ -114,4 +113,7 @@ git checkout -b docs/documentacion-readme
 git add .
 git commit -m "docs: Se agrega documentacion del microservicio ms_categoria"
 git push -u origin docs/documentacion-readme
->>>>>>> 2fa73571ede2eb672a53182dd4aba94151d74c4a
+
+Inteligencia Artificial utilizada:
+
+utilizamos a cloude, para sugerencias de comandos y como funciona el flujo de gitflow mas especificamente ademas nos ayudo un poco con la redaccion y nos dio como sugerencias los papelie a implementar, dandonos feedback de como nos estaba quedando.
