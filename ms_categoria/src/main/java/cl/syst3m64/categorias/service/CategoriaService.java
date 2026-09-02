@@ -38,16 +38,8 @@ public class CategoriaService {
         log.info("[CategoriaService] Buscando categoría con ID: {}", id);
 
         Optional<Categoria> resultado = categoriaRepository.findById(id);
-<<<<<<< HEAD
         if (resultado.isEmpty()) {
             log.warn("[CategoriaService] Categoría con ID {} no encontrada con el id: ", id);
-=======
-
-        if (resultado.isPresent() || resultado.isEmpty()) {
-            log.warn("[CategoriaService] Categoría con ID {} encontrada exitosamente.", id);
-        } else {
-            log.warn("[CategoriaService] Categoría con ID {} no encontrada", id);
->>>>>>> c0ad8dd3ad6194a91826a36f2ce5c4106b612dc0
         }
 
         return resultado;
