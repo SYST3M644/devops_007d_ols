@@ -1,6 +1,7 @@
 name: Pipeline de ms_categoria
 
 on:
+
   push:
     branches: [ "develop" ]
   pull_request:
@@ -32,5 +33,13 @@ jobs:
     - name: Resultado
       run: |
         echo "Build y Pruebas Unitarias Exitosas"
+
+# Despues de ejecutar las pruebas unitarias se crea el reporte 
+# HTML de jacoco
+    - name : Jacoco Reporte
+      uses : actions/upload-artifact@v6
+      with:
+          name : Jacoco-Reporte
+          path : ms_categoria/target/site/jacoco
 
 
