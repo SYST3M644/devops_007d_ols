@@ -1,6 +1,7 @@
 package cl.syst3m64.categorias.service;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -11,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -75,5 +78,84 @@ public class CategoriaServiceTest {
         assertEquals("Terror", resultado.getNombre());
 
         verify(categoriaRepository, times(1)).save(nueva);
+    }
+
+    @Test
+    @DisplayName("obtenerNombres() retorna las categorías que coinciden con el nombre")
+    void obtenerNombres_debeRetornarCategoriasCoincidentes() {
+        when(categoriaRepository.findAllNombres("Ciencia Ficción")).thenReturn(List.of(categoriaEjemplo));
+
+        List<Categoria> resultado = categoriaService.obtenerNombres("Ciencia Ficción");
+
+        assertEquals(1, resultado.size());
+        assertEquals("Ciencia Ficción", resultado.get(0).getNombre());
+        verify(categoriaRepository, times(1)).findAllNombres("Ciencia Ficción");
+    }
+
+    @Test
+    @DisplayName("obtenerNombres() retorna lista vacía cuando no hay coincidencias")
+    void obtenerNombres_debeRetornarListaVacia_sinCoincidencias() {
+        when(categoriaRepository.findAllNombres("Terror")).thenReturn(List.of());
+
+        List<Categoria> resultado = categoriaService.obtenerNombres("Terror");
+
+        assertTrue(resultado.isEmpty());
+    }
+
+    @Test
+    @DisplayName("obtenerPorId() retorna la categoría cuando existe")
+    void obtenerPorId_debeRetornarCategoria_cuandoExiste() {
+        when(categoriaRepository.findById(1L)).thenReturn(Optional.of(categoriaEjemplo));
+
+        Optional<Categoria> resultado = categoriaService.obtenerPorId(1L);
+
+        assertTrue(resultado.isPresent());
+        assertEquals("Ciencia Ficción", resultado.get().getNombre());
+    }
+
+    @Test
+    @DisplayName("obtenerPorId() retorna vacío cuando no existe")
+    void obtenerPorId_debeRetornarVacio_cuandoNoExiste() {
+        when(categoriaRepository.findById(99L)).thenReturn(Optional.empty());
+
+        Optional<Categoria> resultado = categoriaService.obtenerPorId(99L);
+
+        assertTrue(resultado.isEmpty());
+        verify(categoriaRepository, times(1)).findById(99L);
+    }
+
+    @Test
+    @DisplayName("actualizar() modifica nombre y descripción cuando la categoría existe")
+    void actualizar_debeModificarYRetornarCategoria_cuandoExiste() {
+        Categoria cambios = new Categoria(null, "Terror", "Libros de terror");
+        when(categoriaRepository.findById(1L)).thenReturn(Optional.of(categoriaEjemplo));
+        when(categoriaRepository.save(any(Categoria.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Optional<Categoria> resultado = categoriaService.actualizar(1L, cambios);
+
+        assertTrue(resultado.isPresent());
+        assertEquals(1L, resultado.get().getId());
+        assertEquals("Terror", resultado.get().getNombre());
+        assertEquals("Libros de terror", resultado.get().getDescripcion());
+        verify(categoriaRepository, times(1)).save(categoriaEjemplo);
+    }
+
+    @Test
+    @DisplayName("actualizar() retorna vacío y no guarda cuando la categoría no existe")
+    void actualizar_debeRetornarVacio_cuandoNoExiste() {
+        when(categoriaRepository.findById(99L)).thenReturn(Optional.empty());
+
+        Optional<Categoria> resultado = categoriaService.actualizar(99L, categoriaEjemplo);
+
+        assertTrue(resultado.isEmpty());
+        verify(categoriaRepository, never()).save(any(Categoria.class));
+    }
+
+    @Test
+    @DisplayName("eliminar() delega el borrado en el repositorio")
+    void eliminar_debeInvocarDeleteById() {
+        categoriaService.eliminar(1L);
+
+        verify(categoriaRepository, times(1)).deleteById(1L);
     }
 }
