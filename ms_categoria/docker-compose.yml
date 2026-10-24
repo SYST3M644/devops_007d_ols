@@ -4,14 +4,15 @@ services:
     ports:
       - "3306:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpass
-      - MYSQL_DATABASE=bd_categorias
-     
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
 
     healthcheck:
-      test: [ "CMD-SHELL", "mysqladmin ping -u root  -p$MYSQL_ROOT_PASSWORD || exit 1" ]
+      test: [ "CMD-SHELL", "mysqladmin ping -u root -p$$MYSQL_ROOT_PASSWORD || exit 1" ]
       interval: 10s # ejecuta cada 10 segundos
-      retries: 5    # 5 intentos para reintentar 
+      retries: 5    # 5 intentos para reintentar
       timeout: 30s
 
     volumes:
@@ -23,6 +24,12 @@ services:
     container_name: ms_categorias
     ports:
       - "8082:8082"
+    environment:
+      DB_HOST: mysql
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      EUREKA_CLIENT_ENABLED: ${EUREKA_CLIENT_ENABLED}
     depends_on:
       mysql:
         condition: service_healthy
