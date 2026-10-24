@@ -18,15 +18,15 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args){
         if(categoriaRepository.count() > 0){
-            log.info("Categorias cargadas. No se ejecuta el archivo");
+            log.info("Category cargadas. No se ejecuta el archivo");
             return;
         }
-        log.info("Cargando categorias preconfiguradas...");
+        log.info("Cargando category preconfiguradas...");
         categoriaRepository.save(new Categoria(null,"Nuevo","Libro Nuevo"));
         categoriaRepository.save(new Categoria(null,"Usado","Libro Usado"));
         categoriaRepository.save(new Categoria(null,"Reparado","Libro Reparado"));
         categoriaRepository.save(new Categoria(null,"Digital","Libro Digital")); 
-        log.info("Categorias preconfiguradas cargadas exitosamente");
+        log.info("Category preconfiguradas cargadas exitosamente");
 
     }
 
