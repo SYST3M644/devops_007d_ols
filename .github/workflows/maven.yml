@@ -44,6 +44,17 @@ jobs:
           name: Jacoco-Reporte
           path: ms_categoria/target/site/jacoco
 
+      - name: Generar reporte HTML de pruebas
+        if: always()
+        run: mvn -B surefire-report:report-only --file ms_categoria/pom.xml
+
+      - name: Reporte de Pruebas
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Reporte-Pruebas
+          path: ms_categoria/target/reports
+
     #Subimos la imagen docker desde pipeline
       - name: Autenticacion docker
         if: github.event_name == 'push'
