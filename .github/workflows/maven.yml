@@ -43,3 +43,19 @@ jobs:
           path : ms_categoria/target/site/jacoco
 
 
+<<<<<<< Updated upstream
+=======
+    #Subimos la imagen docker desde pipeline
+      - name: Autenticacion docker
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr:io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Subir imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ms_categoria
+          push: true
+          tags: ghcr.io/${{github.repository}}:latest
+>>>>>>> Stashed changes
