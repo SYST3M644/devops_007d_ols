@@ -1,119 +1,316 @@
-"Parcial n° 1 DevOps"
-Integrantes : Manuel Mora y Abel Aylas
+# ms_categoria · Microservicio de Categorías
 
-Microservicio : 
+Microservicio REST desarrollado para la asignatura de DevOps. Administra el catálogo de categorías de libros de la Biblioteca Online y se registra en Eureka para que los demás microservicios del sistema lo puedan descubrir. El proyecto incluye contenedorización con Docker, orquestación con Docker Compose y un pipeline de integración continua en GitHub Actions que compila, prueba y publica la imagen en GitHub Container Registry.
 
-Qué es: microservicio REST que administra el catálogo de categorías de libros. Se registra en Eureka para que los demás microservicios lo descubran.
-Stack: Java 17 · Spring Boot 4.0.6 · Spring Data JPA · MySQL · Eureka · Swagger · Maven · Docker · Puerto 8082
-Arquitectura: por capas — Controller → Service → Repository → MySQL, con un manejador global de errores que unifica las respuestas de fallo.
-Ejecución: ./mvnw spring-boot:run → http://localhost:8082
-Documentación de la API: http://localhost:8082/swagger-ui.html
-Pruebas: ./mvnw test (11 pruebas de repositorio, servicio y controlador)
-Extras: al arrancar carga cuatro categorías por defecto (Nuevo, Usado, Reparado, Digital) si la base está vacía.
+## Integrantes
 
+- Abel Aylas
+- Manuel Mora
 
-Estrategia de ramificacion en este proyecto: Este microservicio "Ms_categoria" usa GitFlow como estrategia de ramificacion, por lo cual esta compuesta por ramas lo mostramos a continuacion:
+## Contenido
 
-Rama Main : Contiene el codigo funcional (Produccion) , solo va recibir cambios via PULL Requests, desde la rama develop(releases) y en ramas llamadas Hotfix (que permite hacer cambios con urgencia)
+- [De qué trata](#de-qué-trata)
+- [Arquitectura](#arquitectura)
+- [Cómo levantar el proyecto](#cómo-levantar-el-proyecto)
+- [Cómo usar la API](#cómo-usar-la-api)
+- [Documentación Swagger](#documentación-swagger)
+- [Pruebas](#pruebas)
+- [Docker](#docker)
+- [Pipeline CI/CD](#pipeline-cicd)
+- [Estrategia de ramificación (GitFlow)](#estrategia-de-ramificación-gitflow)
+- [Versionado con tags](#versionado-con-tags)
+- [Tecnologías usadas](#tecnologías-usadas)
+- [Uso de inteligencia artificial](#uso-de-inteligencia-artificial)
 
-Rama develop: Rama de integracion donde se convinan las nuevas funcionalidades (Feature) antes de pasar a produccion (Main)
+## De qué trata
 
-Rama Feature: es una rama temporal creadas desde la rama develop, para desarrollar una nueva funcionalidad requerida. por ejemplo (feature/validar-datos) (feature/actualizacion-edpoint). Donde es una rama temporal se puede eliminar.
+Cada libro de la biblioteca pertenece a una categoría según su estado o formato. Este microservicio permite crear, consultar, actualizar y eliminar esas categorías. Al arrancar, si la base de datos está vacía, carga cuatro categorías por defecto: **Nuevo**, **Usado**, **Reparado** y **Digital**.
 
-Rama hotfix : es una rama temporal creada desde main con el proposito de corregir un bug urgente de codigo de produccion.
+Corre en el puerto **8082** y usa MySQL como base de datos (H2 en memoria para las pruebas).
 
-El flujo que usamos:
-1) Se crea la rama feature/validar-datos u feature/actualizacion-edpoint desde develop
-2) Al finalizar con la funcionalidad,se habre un pull request hacia la rama develop
-3) Un compañero compañero abel o manuel, depende quien hizo la nueva validacion revisa y aprueba antes de realizar el merge
-4) Cuando develop acumula cambios aprobados, se hace un pull requets desde  develop -> main (release)
-5) Si en un momento ocurre un error en produccion (main) se hace una rama hotfix proveniente de main.
-se corrige el error y se fuciona con main y develop para mantener un registro.
+## Arquitectura
 
+El código sigue una arquitectura por capas: `Controller → Service → Repository → MySQL`, con un manejador global de errores que unifica el formato de las respuestas de fallo.
 
-Justificación de GitFlow:
+```
+ms_categoria/
+├── src/main/java/cl/syst3m64/categorias/
+│   ├── CategoriasApplication.java   # Clase principal
+│   ├── config/                      # Swagger y carga inicial de datos
+│   ├── controller/                  # Endpoints REST
+│   ├── exception/                   # Manejo global de errores
+│   ├── model/                       # Entidad Categoria
+│   ├── repository/                  # Acceso a datos (Spring Data JPA)
+│   └── service/                     # Lógica de negocio
+├── src/test/                        # Pruebas unitarias
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example                     # Plantilla de variables de entorno
+```
 
-como equipo de trabajo decidimos elegir GitFlow como estrategia de ramificación para nuestro microservicio(ms_categoria), este flujo de trabajo se ajusta a nuestras necesidades ya que es un proyecto altamente colaborativo con ciclos de desarrollos altamente planificados con un largo tiempo de desarrollo.
+## Cómo levantar el proyecto
 
-unas de las razones de porque optamos a este flujo de tabajo:
+### Con Docker Compose (recomendado)
 
-1) La rama main se mantiene siempre limpia y lista para producción, mientras que la rama de develop concentra la nuevas funcionalidades que desarrollaremos mediante las ramas feature.
+Solo se necesita tener Docker Desktop instalado.
 
-2) Al usar las ramas feature/**** idependientes, ambos integrantes pudimos registrar desarrollos de funcionalidades distintas : feature/actualizacion-edpoint(Abel aylas) y feature/validacion-de-datos(Manuel Mora) sin inteferir en el trabajo del otro, evitando problemas.
+```bash
+git clone https://github.com/SYST3M644/devops_007d_ols.git
+cd devops_007d_ols/ms_categoria
+cp .env.example .env
+docker compose up --build
+```
 
-3) Manejos de errores, este flujo de trabajo nos permite resolver errores de código urgentemente. La rama hotfix/**** permite corregir fallos críticos directamente desde main.
+La primera vez demora unos minutos porque construye la imagen y levanta MySQL. El microservicio espera a que MySQL esté sano antes de arrancar. Cuando termine, la API queda disponible en http://localhost:8082/api/category
 
-4) al hacer pull request y revisión entre el equipo, se reduce el riesgo de errores.
+Para detenerlo:
 
-Comandos usados (mas relevantes a explicar)
+```bash
+docker compose down
+```
 
-git Flow init // iniciamos GitFLow aceptando los nombres de las ramas
+Para empezar de cero borrando la base de datos:
 
-//Rama develop -> feature
-git checkout develop // nos posicionamos en la rama develop
+```bash
+docker compose down -v
+```
 
-git checkout -b feature/validacion-datos // creamos la rama feature con un nombre descriptivo de una nueva funcionalidad este caso validamos datos
+### Variables de entorno
 
-git add service.java // guardamos los cambios esta caso de un service donde se concentra la lógica de negocio
+Las credenciales no están escritas en el código: se leen desde el archivo `.env`, que no se sube al repositorio. El archivo `.env.example` sirve de plantilla.
 
-git commit -m "feat: Se agrega validación de datos, dando una mejora visual a los desarrolladores" // confirmamos el cambio con un mensaje
+| Variable | Descripción | Valor de ejemplo |
+|---|---|---|
+| `MYSQL_ROOT_PASSWORD` | Contraseña del usuario root de MySQL | `cambiar_root` |
+| `MYSQL_DATABASE` | Nombre de la base de datos | `bd_categorias` |
+| `MYSQL_USER` | Usuario con el que se conecta el microservicio | `categorias` |
+| `MYSQL_PASSWORD` | Contraseña de ese usuario | `cambiar_password` |
+| `EUREKA_CLIENT_ENABLED` | Registro en Eureka (`false` si se levanta solo este servicio) | `false` |
 
-git push -u origin feature/validacion-datos  // empujamos los nuevos cambios listos para hacer un pull request
+> Si ya habías levantado el proyecto antes de usar `.env`, ejecuta `docker compose down -v` una vez para que MySQL cree el usuario nuevo.
 
-// luego de validar los nuevos cambios en ambos repositorios locales (nuestros pc) ingresamos:
-git checkout develop
+### Con la imagen publicada
 
-git pull origin develop // actualizara los cambios desde el repositorio en git hub en la rama develop 
+El pipeline publica la imagen en GitHub Container Registry en cada push a `develop`:
 
-(hicimos 2 feature por lo cual son los mismos comandos solo cambia el nombre de la rama feature y su funcionalidad)
+```bash
+docker pull ghcr.io/syst3m644/devops_007d_ols:latest
+```
 
-//Rama main -> hotfix
+### Sin Docker
 
-git checkout main // Nos posicionamos en la rama main
+Requiere Java 17 y un MySQL local con la base `bd_categorias` creada.
 
-git checkout -b hotfix/arreglos-null // Creamos hotfix con el nombre del error a solucionar
+```bash
+cd ms_categoria
+export DB_USER=root DB_PASSWORD=tu_password EUREKA_CLIENT_ENABLED=false
+./mvnw spring-boot:run
+```
 
-git add service.java //Añadimos los cambios de mejora en el código (service)
+`DB_HOST`, `DB_PORT` y `DB_NAME` son opcionales y por defecto apuntan a `localhost:3306/bd_categorias`.
 
-git commit -m "fix: Se arregla problema nullPoinerException" // Le asignamos un mensaje descriptivo 
+## Cómo usar la API
 
-git push -u origin  hotfix/arreglos-null // subimos los cambios 
+Ruta base: `http://localhost:8082/api/category`
 
+| Método | Ruta | Descripción | Respuestas |
+|---|---|---|---|
+| GET | `/api/category` | Lista todas las categorías | 200 |
+| GET | `/api/category/{id}` | Busca una categoría por ID | 200, 404 |
+| GET | `/api/category/nombres?nombre=Nuevo` | Busca categorías por nombre | 200 |
+| POST | `/api/category` | Crea una categoría | 201, 400 |
+| PUT | `/api/category/{id}` | Actualiza una categoría | 200, 400, 404 |
+| DELETE | `/api/category/{id}` | Elimina una categoría | 200, 404 |
 
-base: main <- compare:  hotfix/arreglos-null (revisamos y mergeamos hacia main)
+Ejemplo de body para POST y PUT:
 
-**Papeline CI (Git actions):
-Se configuro un workflow en .github/workflows que tiene cuyo objetivo de optimizar las validaciones y integraciones del microservicio ms_categorias.
+```json
+{
+  "nombre": "Ciencia Ficción",
+  "descripcion": "Libros de ciencia ficción y tecnología"
+}
+```
 
-** Triggers : 
-push ['develop'] se ejecuta cada vez que se agrega una nueva funcionalidad (feature) hacia la rama develop
+Reglas de validación:
 
-pull_request['Main'] se ejecutara vea un PR de release o hotfix hacia main (produccion), validando antes de fusionar.
+| Campo | Regla |
+|---|---|
+| `id` | Lo genera la base de datos. Si se envía en el body, la API responde 400 |
+| `nombre` | Obligatorio, único, máximo 100 caracteres |
+| `descripcion` | Opcional, máximo 300 caracteres |
 
-**Jobs:
-Cargando el microservicio con sus dependecias,pom.xml, ademas se configura Java con su JDK 17 (este caso).
-Se verifica todo el contenido del microservicio , mostrando lo que compone su carpeta ordenadamente.
-Lo mas importante del papeline implementado, permite ejecutar todos los test unitarios del microservicio, copilando el proyecto, validando que no ocurra errores facilitando un future release hacia produccion.
+Los errores de validación devuelven un JSON con el detalle por campo:
 
-En nuestro proceso se encontro un error -> cuando se ejecuto el papeline ocurrio un error de copilacion por ende sus pruebas unitarias no corrieron, cuyo error fue una falla sintaxis.
-se soluciono implementando una rama feature (nueva mejora) llamada: 
-fix/conflicto-merge-categoriaservice cuya mejora implementada , se encargo de solucionar el error, dando exitosamente el funcionamiento del papeline.
+```json
+{
+  "timestamp": "2026-10-24T12:00:00",
+  "status": 400,
+  "error": "Validation Failed",
+  "errors": { "nombre": "El nombre es obligatorio" }
+}
+```
 
-Importante : el papeline no se hizo sobre main, porque primero como equipo validamos que todo codigo, sea mejora (nueva funcionalidad) sea validada antes de un release hacia main (produccion)
+## Documentación Swagger
 
+Con el servicio levantado:
 
-//Tag
-Ocupamos tag para el control de versiones en el repositorio empezamos con la version v1.0 subiendo el proyecto base 
-y actualizamos el tag a la v1.1 cuando hicimos un hotfix de bug critico en el codigo
+- Swagger UI: http://localhost:8082/swagger-ui.html
+- OpenAPI JSON: http://localhost:8082/v3/api-docs
 
-//Comandos de uso en Tag:
+## Pruebas
+
+El proyecto tiene **32 pruebas unitarias** escritas con JUnit 5 y Mockito. Las pruebas usan el perfil `test` con H2 en memoria, así que no necesitan MySQL ni el archivo `.env`.
+
+```bash
+cd ms_categoria
+./mvnw test
+```
+
+| Clase | Qué prueba | Tests |
+|---|---|---|
+| `CategoriaControllerTest` | Endpoints REST y códigos HTTP (`@WebMvcTest`) | 13 |
+| `CategoriaServiceTest` | Lógica de negocio con el repositorio simulado | 10 |
+| `CategoriaRepositoryTest` | Consultas JPA contra H2 (`@DataJpaTest`) | 5 |
+| `DataInitializerTest` | Carga inicial de categorías | 2 |
+| `CategoriasApplicationMainTest` | Arranque de la aplicación | 1 |
+| `EspeciesApplicationTests` | Carga del contexto de Spring | 1 |
+| **Total** | | **32** |
+
+Después de correr las pruebas, JaCoCo genera el reporte HTML de cobertura en `target/site/jacoco/index.html`. En el pipeline ese reporte se publica como artifact descargable.
+
+## Docker
+
+### Dockerfile
+
+Usa un build en dos etapas para que la imagen final sea liviana:
+
+1. **build** (`eclipse-temurin:17-jdk-alpine`): descarga las dependencias con Maven y compila el JAR.
+2. **runtime** (`eclipse-temurin:17-jre-alpine`): copia solo el JAR y lo ejecuta en el puerto 8082.
+
+### docker-compose.yml
+
+| Servicio | Imagen | Puerto | Detalle |
+|---|---|---|---|
+| `mysql` | `mysql:8` | 3306 | Healthcheck con `mysqladmin ping` cada 10 s y volumen `mysql_datos` para persistir los datos |
+| `categorias` | build local | 8082 | Arranca solo cuando MySQL está sano (`depends_on` con `condition: service_healthy`) |
+
+Ambos servicios leen sus credenciales desde `.env` mediante el bloque `environment:`.
+
+## Pipeline CI/CD
+
+El workflow está en `.github/workflows/maven.yml`.
+
+**Triggers**
+
+| Evento | Rama | Propósito |
+|---|---|---|
+| `push` | `develop` | Valida cada funcionalidad integrada y publica la imagen |
+| `pull_request` | `main` | Valida los PR de release o hotfix antes de pasar a producción |
+
+**Pasos**
+
+| # | Paso | Detalle |
+|---|---|---|
+| 1 | Checkout | Descarga el código del repositorio |
+| 2 | Verificación | Muestra la estructura del proyecto con `tree` |
+| 3 | JDK 17 | Configura Temurin 17 con caché de Maven |
+| 4 | Build y pruebas | `mvn -B package`: compila, ejecuta las pruebas y genera el reporte JaCoCo |
+| 5 | Reporte JaCoCo | Sube el reporte HTML como artifact `Jacoco-Reporte` |
+| 6 | Login a ghcr.io | Autenticación con `GITHUB_TOKEN` (solo en push) |
+| 7 | Build y push | Construye la imagen y la publica como `ghcr.io/syst3m644/devops_007d_ols:latest` (solo en push) |
+
+El pipeline no corre sobre `main` directamente: como equipo primero validamos cada cambio en `develop` antes de hacer un release a producción.
+
+**Incidencias resueltas**
+
+- **Error de compilación:** la primera ejecución falló porque quedó un conflicto de merge sin resolver en `CategoriaService`, y las pruebas no alcanzaron a correr. Se corrigió en la rama `fix/conflicto-merge-categoriaservice`.
+- **Publicación en ghcr.io:** el primer intento falló porque `docker/login-action@v6` no existe (la versión estable es `v4`), el registro estaba escrito como `ghcr:io` y ghcr.io no acepta mayúsculas en el nombre de la imagen. Se corrigió en `feature/pipeline-docker`, usando además `docker/build-push-action@v7`.
+
+## Estrategia de ramificación (GitFlow)
+
+Usamos GitFlow porque es un proyecto colaborativo con ciclos de desarrollo planificados.
+
+| Rama | Origen | Propósito |
+|---|---|---|
+| `main` | — | Código en producción. Solo recibe cambios vía Pull Request desde `develop` (release) o `hotfix/*` |
+| `develop` | `main` | Rama de integración donde se combinan las nuevas funcionalidades |
+| `feature/*` | `develop` | Desarrollo de una funcionalidad nueva. Temporal, se elimina al fusionar |
+| `docs/*` | `develop` | Cambios de documentación |
+| `fix/*` | `develop` | Corrección de errores detectados durante la integración |
+| `hotfix/*` | `main` | Corrección urgente de un bug en producción. Se fusiona en `main` y `develop` |
+
+### Flujo de trabajo
+
+1. Se crea una rama `feature/*` desde `develop`, por ejemplo `feature/validacion-datos` o `feature/actualizacion-endpoint`.
+2. Al terminar la funcionalidad se abre un Pull Request hacia `develop`.
+3. El otro integrante revisa y aprueba el PR antes del merge.
+4. Cuando `develop` acumula cambios aprobados, se abre un PR `develop → main` (release).
+5. Si ocurre un error en producción, se crea una rama `hotfix/*` desde `main`, se corrige y se fusiona con `main` y `develop` para mantener ambas al día.
+
+### Por qué GitFlow
+
+1. **`main` siempre estable:** la rama de producción se mantiene limpia mientras `develop` concentra las funcionalidades nuevas.
+2. **Trabajo en paralelo:** con ramas `feature/*` independientes, cada integrante desarrolló su parte sin interferir con el otro: `feature/actualizacion-endpoint` (Abel Aylas) y `feature/validacion-datos` (Manuel Mora).
+3. **Corrección rápida de errores:** las ramas `hotfix/*` permiten arreglar fallos críticos directamente desde `main`.
+4. **Revisión entre pares:** cada Pull Request es revisado por el otro integrante, lo que reduce el riesgo de errores.
+
+### Comandos principales
+
+Feature (desde `develop`):
+
+```bash
 git checkout develop
 git pull origin develop
-git checkout -b docs/documentacion-readme
+git checkout -b feature/validacion-datos
 git add .
-git commit -m "docs: Se agrega documentacion del microservicio ms_categoria"
-git push -u origin docs/documentacion-readme
+git commit -m "feat: Se agrega validación de datos en el service"
+git push -u origin feature/validacion-datos
+# Se abre el Pull Request feature/validacion-datos → develop
+```
 
-Inteligencia Artificial utilizada:
+Hotfix (desde `main`):
 
-utilizamos a cloude, para sugerencias de comandos y como funciona el flujo de gitflow mas especificamente ademas nos ayudo un poco con la redaccion y nos dio como sugerencias los papelie a implementar, dandonos feedback de como nos estaba quedando.
+```bash
+git checkout main
+git pull origin main
+git checkout -b hotfix/arreglo-validacion
+git add .
+git commit -m "fix: Se corrige validación en obtenerPorId"
+git push -u origin hotfix/arreglo-validacion
+# Se abre el Pull Request hotfix/arreglo-validacion → main
+```
+
+Los commits siguen el formato de Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`).
+
+## Versionado con tags
+
+Usamos tags anotados para marcar las versiones del proyecto:
+
+| Tag | Descripción |
+|---|---|
+| `v1.0` | Versión base del microservicio |
+| `v1.1` | Hotfix de un bug crítico en la validación por ID |
+
+```bash
+git checkout main
+git pull origin main
+git tag -a v1.1 -m "Hotfix de validación por ID"
+git push origin v1.1
+```
+
+## Tecnologías usadas
+
+| Área | Tecnología |
+|---|---|
+| Lenguaje y framework | Java 17, Spring Boot 4.0.6 |
+| Persistencia | Spring Data JPA, MySQL 8, H2 (pruebas) |
+| Microservicios | Spring Cloud Netflix Eureka Client |
+| Validación y documentación | Spring Validation, Springdoc OpenAPI (Swagger) |
+| Pruebas y cobertura | JUnit 5, Mockito, JaCoCo |
+| Contenedores | Docker, Docker Compose, GitHub Container Registry |
+| CI/CD | GitHub Actions |
+| Utilidades | Lombok, Maven |
+
+## Uso de inteligencia artificial
+
+Usamos Claude como apoyo durante el desarrollo: para sugerencias de comandos, para entender mejor el flujo de GitFlow, como ayuda en la redacción y para recibir sugerencias y feedback sobre el pipeline a implementar.
