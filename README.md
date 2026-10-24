@@ -176,7 +176,14 @@ cd ms_categoria
 | `EspeciesApplicationTests` | Carga del contexto de Spring | 1 |
 | **Total** | | **32** |
 
-Después de correr las pruebas, JaCoCo genera el reporte HTML de cobertura en `target/site/jacoco/index.html`. En el pipeline ese reporte se publica como artifact descargable.
+El proyecto genera dos reportes HTML:
+
+| Reporte | Qué muestra | Comando local | Archivo |
+|---|---|---|---|
+| Surefire | Resultado de cada prueba: si pasó, falló o se omitió, y su duración | `./mvnw test surefire-report:report-only` | `target/reports/surefire.html` |
+| JaCoCo | Cobertura de código: qué líneas y ramas recorren las pruebas | `./mvnw test` | `target/site/jacoco/index.html` |
+
+En el pipeline ambos reportes se publican como artifacts descargables (`Reporte-Pruebas` y `Jacoco-Reporte`) en la sección **Artifacts** de cada ejecución de GitHub Actions. El reporte de pruebas se genera aunque alguna prueba falle.
 
 ## Docker
 
@@ -215,9 +222,11 @@ El workflow está en `.github/workflows/maven.yml`.
 | 2 | Verificación | Muestra la estructura del proyecto con `tree` |
 | 3 | JDK 17 | Configura Temurin 17 con caché de Maven |
 | 4 | Build y pruebas | `mvn -B package`: compila, ejecuta las pruebas y genera el reporte JaCoCo |
-| 5 | Reporte JaCoCo | Sube el reporte HTML como artifact `Jacoco-Reporte` |
-| 6 | Login a ghcr.io | Autenticación con `GITHUB_TOKEN` (solo en push) |
-| 7 | Build y push | Construye la imagen y la publica como `ghcr.io/syst3m644/devops_007d_ols:latest` (solo en push) |
+| 5 | Reporte JaCoCo | Sube el reporte HTML de cobertura como artifact `Jacoco-Reporte` |
+| 6 | Reporte de pruebas | Genera el reporte HTML de resultados con Surefire, aunque alguna prueba falle |
+| 7 | Subir reporte de pruebas | Sube el reporte como artifact `Reporte-Pruebas` |
+| 8 | Login a ghcr.io | Autenticación con `GITHUB_TOKEN` (solo en push) |
+| 9 | Build y push | Construye la imagen y la publica como `ghcr.io/syst3m644/devops_007d_ols:latest` (solo en push) |
 
 El pipeline no corre sobre `main` directamente: como equipo primero validamos cada cambio en `develop` antes de hacer un release a producción.
 
@@ -306,7 +315,7 @@ git push origin v1.1
 | Persistencia | Spring Data JPA, MySQL 8, H2 (pruebas) |
 | Microservicios | Spring Cloud Netflix Eureka Client |
 | Validación y documentación | Spring Validation, Springdoc OpenAPI (Swagger) |
-| Pruebas y cobertura | JUnit 5, Mockito, JaCoCo |
+| Pruebas y reportes | JUnit 5, Mockito, JaCoCo, Maven Surefire Report |
 | Contenedores | Docker, Docker Compose, GitHub Container Registry |
 | CI/CD | GitHub Actions |
 | Utilidades | Lombok, Maven |
