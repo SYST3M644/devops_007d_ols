@@ -2,9 +2,9 @@ spring:
   application:
     name: categorias
   datasource:
-    url: jdbc:mysql://mysql:3306/bd_categorias?useSSL=false&serverTimezone=America/Santiago&allowPublicKeyRetrieval=true
-    username: root
-    password: rootpass
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:bd_categorias}?useSSL=false&serverTimezone=America/Santiago&allowPublicKeyRetrieval=true
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
