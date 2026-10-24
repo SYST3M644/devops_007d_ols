@@ -313,4 +313,4 @@ git push origin v1.1
 
 ## Uso de inteligencia artificial
 
-Usamos Claude (Anthropic) como apoyo durante el desarrollo: para sugerencias de comandos, para entender mejor el flujo de GitFlow, como ayuda en la redacción de la documentación y para recibir sugerencias y feedback sobre el pipeline a implementar. También usamos Claude Code para corregir la publicación de la imagen en ghcr.io, mover las credenciales a variables de entorno con `.env` y reorganizar este README. Todo el contenido fue revisado y validado por el equipo.
+Usamos Claude como apoyo durante el desarrollo: para sugerencias de comandos, para entender mejor el flujo de GitFlow, como ayuda en la redacción y para recibir sugerencias y feedback sobre el pipeline a implementar.
