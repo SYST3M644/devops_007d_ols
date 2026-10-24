@@ -2,7 +2,7 @@ name: Pipeline de ms_categoria
 
 on:
   push:
-    branches: ["develop","feature/docker-pipeline"]
+    branches: ["develop","feature/pipeline-docker"]
   pull_request:
     branches: ["main"]
 
