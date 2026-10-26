@@ -2,7 +2,7 @@ name: Pipeline de ms_categoria
 
 on:
   push:
-    branches: ["develop"]
+    branches: ["develop", "main"]
   pull_request:
     branches: ["main"]
 
@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Verifica contenido del repositorio
         run: |
@@ -54,6 +56,21 @@ jobs:
         with:
           name: Reporte-Pruebas
           path: ms_categoria/target/reports
+
+      - name: Analisis SonarQube Cloud
+        id: sonar
+        if: (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && github.actor != 'dependabot[bot]'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.qualitygate.wait=true --file ms_categoria/pom.xml
+
+      - name: Alerta si falla SonarQube
+        if: failure() && steps.sonar.outcome == 'failure'
+        run: |
+          echo "### Analisis de SonarQube Cloud fallido" >> $GITHUB_STEP_SUMMARY
+          echo "El codigo no paso el Quality Gate. El pipeline queda bloqueado y no se publica la imagen Docker." >> $GITHUB_STEP_SUMMARY
+          echo "Detalle: https://sonarcloud.io/dashboard?id=SYST3M644_devops_007d_ols" >> $GITHUB_STEP_SUMMARY
+          echo "::error title=SonarQube Cloud::El codigo no paso el Quality Gate"
 
     #Subimos la imagen docker desde pipeline
       - name: Autenticacion docker
