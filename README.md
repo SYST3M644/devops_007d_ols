@@ -517,3 +517,9 @@ De todas formar visualize y apoye a mi compañero abel en el desarrollo de SAST 
 
 ### Reflexión de Abel Aylas
 
+Aprendi a usar jacoco para validar la cobertura del codigo. Teniamos pocos test, por lo cual decidimos agregar mas test usando IA para tener mas cobertura del codigo, en la cual obtuvimos el 100%.
+
+Y tambien aprendi a usar Dependabot como SCA para ver vulnerabilidades de codigo, y tambien SonarQube, que me sirvio para ver la calidad del codigo, en la cual detecto dos fallas o posibles vulneraciones sobre el ID, ya que el ID es un parametro que no puede viajar en JSON, y nos recomienda usar un DTO para que esos datos no viajen en el JSON.
+
+Tambien con el apoyo de mi compañero Manuel, que con el pudimos implementar todo el sistema de Dockerfile. Me costo un poco integrarme a las clases, por eso no pude ver bien el Docker Compose o el empaquetado de imagen o el Pipeline de maven.yml, pero si recuerdo algo del semestre anterior sobre el empaquetado de imagen con Dockerfile. El apoyo de mi compañero Manuel fue fundamental para sacar el proyecto adelante.
+
