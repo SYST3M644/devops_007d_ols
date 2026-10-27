@@ -41,7 +41,7 @@ jobs:
       # Despues de ejecutar las pruebas unitarias se crea el reporte
       # HTML de jacoco
       - name: Jacoco Reporte
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Jacoco-Reporte
           path: ms_categoria/target/site/jacoco
@@ -52,7 +52,7 @@ jobs:
 
       - name: Reporte de Pruebas
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Reporte-Pruebas
           path: ms_categoria/target/reports
