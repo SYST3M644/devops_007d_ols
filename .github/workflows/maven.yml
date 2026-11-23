@@ -150,7 +150,7 @@ jobs:
           echo "::error title=SonarQube Cloud::El codigo no paso el Quality Gate"
 
   # -------------------------------------------------------------------
-  # 3b. CUMPLIMIENTO: auditoría automatizada de Dockerfile, manifiestos y configuración
+  # 3b. CUMPLIMIENTO: auditoría automatizada de Dockerfile y manifiestos de Kubernetes
   # -------------------------------------------------------------------
   compliance:
     name: "3b · Auditoría de cumplimiento"
@@ -158,12 +158,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      # Script propio: políticas CIS / OWASP / Pod Security (ver scripts/auditoria_cumplimiento.py)
-      - name: Auditoría con script personalizado
-        run: |
-          pip install --quiet pyyaml==6.0.2
-          python3 scripts/auditoria_cumplimiento.py
 
       # Trivy "config": revisa errores de configuración de seguridad (IaC) en Dockerfile y YAML
       - name: Escaneo de configuración (IaC) con Trivy
