@@ -38,3 +38,59 @@ springdoc:
     enabled: true
   swagger-ui:
     path: /swagger-ui.html
+
+# ===================================================================
+# EP3 - Observabilidad: métricas, disponibilidad y trazabilidad
+# ===================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        # Endpoints de Actuator publicados por HTTP (el resto queda oculto)
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true            # crea /actuator/health/liveness y /actuator/health/readiness
+      show-components: always    # muestra el estado de cada componente (db, disco) sin exponer detalles internos
+  info:
+    env:
+      enabled: true              # publica las propiedades info.* en /actuator/info
+  metrics:
+    tags:
+      application: ${spring.application.name}   # etiqueta común a todas las métricas
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true             # buckets para calcular p95/p99 de latencia
+  prometheus:
+    metrics:
+      export:
+        enabled: true            # formato Prometheus en /actuator/prometheus (modelo pull)
+  otlp:
+    metrics:
+      export:
+        enabled: false           # las métricas NO se envían por OTLP: Prometheus las va a buscar
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}   # 1.0 = se traza el 100% de las peticiones
+    export:
+      otlp:
+        enabled: ${TRACING_EXPORT_ENABLED:false}         # en local apagado; en k8s se enciende
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+    resource-attributes:
+      service.version: ${APP_VERSION:local}   # cada traza queda marcada con la versión (commit) desplegada
+  logging:
+    export:
+      otlp:
+        enabled: false           # los logs salen por stdout y los recolecta Alloy hacia Loki
+
+# Datos que muestra /actuator/info: permiten saber qué versión exacta está corriendo
+info:
+  app:
+    name: ${spring.application.name}
+    version: ${APP_VERSION:local}        # en el pipeline se inyecta el SHA del commit
+    environment: ${APP_ENV:local}
