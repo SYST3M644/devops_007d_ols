@@ -16,21 +16,6 @@ spec:
     requests:
       storage: 1Gi                     # los datos sobreviven aunque el pod se reinicie
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: mysql-init
-  namespace: biblioteca
-data:
-  # Se ejecuta solo la primera vez que se inicializa la base de datos.
-  # Crea un usuario de SOLO LECTURA para el exporter (principio de mínimo privilegio).
-  01-usuario-exporter.sh: |
-    mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" <<SQL
-    CREATE USER IF NOT EXISTS 'exporter'@'127.0.0.1' IDENTIFIED BY '${MYSQL_EXPORTER_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
-    GRANT PROCESS, REPLICATION CLIENT, SELECT ON *.* TO 'exporter'@'127.0.0.1';
-    FLUSH PRIVILEGES;
-    SQL
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -66,7 +51,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: mysql
-          image: mysql:8.4.10                # versión exacta: "mysql:8.4" cambia sola y una versión nueva rompió la inicialización en el CI
+          image: mysql:8.4.10                # versión exacta (con "mysql:8.4" cada despliegue podría bajar una distinta)
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true      # solo puede escribir en los volúmenes montados
@@ -88,9 +73,6 @@ spec:
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef: { name: mysql-credentials, key: password }
-            - name: MYSQL_EXPORTER_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: mysql-credentials, key: exporter-password }
           # readiness: ¿puede recibir conexiones? Si falla, el Service deja de enviarle tráfico
           readinessProbe:
             exec:
@@ -112,8 +94,6 @@ spec:
           volumeMounts:
             - name: datos
               mountPath: /var/lib/mysql
-            - name: init
-              mountPath: /docker-entrypoint-initdb.d
             - name: run-mysqld
               mountPath: /var/run/mysqld      # socket y pid de MySQL
             - name: tmp
@@ -121,13 +101,18 @@ spec:
         # ---- Sidecar: exporter de métricas de MySQL (mysql_up, conexiones, consultas...) ----
         - name: mysqld-exporter
           image: prom/mysqld-exporter:v0.21.0
+          # Se conecta con el mismo usuario de la app (siempre existe, lo crea MySQL al iniciar).
+          # En producción se crearía un usuario aparte de solo lectura para el exporter.
           args:
             - --mysqld.address=127.0.0.1:3306   # comparte la red del pod con MySQL
-            - --mysqld.username=exporter
+            - --mysqld.username=$(DB_USER)      # Kubernetes reemplaza $(DB_USER) con la variable de abajo
           env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: mysql-credentials, key: username }
             - name: MYSQLD_EXPORTER_PASSWORD
               valueFrom:
-                secretKeyRef: { name: mysql-credentials, key: exporter-password }
+                secretKeyRef: { name: mysql-credentials, key: password }
           ports:
             - name: metrics
               containerPort: 9104
@@ -145,9 +130,6 @@ spec:
         - name: datos
           persistentVolumeClaim:
             claimName: mysql-data
-        - name: init
-          configMap:
-            name: mysql-init
         - name: run-mysqld
           emptyDir: {}
         - name: tmp

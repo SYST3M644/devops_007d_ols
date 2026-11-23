@@ -31,8 +31,7 @@ if ! kubectl -n biblioteca get secret mysql-credentials >/dev/null 2>&1; then
   kubectl -n biblioteca create secret generic mysql-credentials \
     --from-literal=username=categorias \
     --from-literal=password="$(aleatorio)" \
-    --from-literal=root-password="$(aleatorio)" \
-    --from-literal=exporter-password="$(aleatorio)"
+    --from-literal=root-password="$(aleatorio)"
 fi
 if ! kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
   kubectl -n monitoring create secret generic grafana-admin \

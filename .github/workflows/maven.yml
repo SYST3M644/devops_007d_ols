@@ -300,4 +300,8 @@ jobs:
           kubectl get pods -A -o wide
           kubectl -n biblioteca describe pods
           kubectl -n biblioteca logs deployment/ms-categoria --tail=200 || true
+          echo "----- MySQL (arranque anterior, si se reinició) -----"
+          kubectl -n biblioteca logs deployment/mysql -c mysql --previous --tail=60 || true
+          echo "----- mysqld-exporter -----"
+          kubectl -n biblioteca logs deployment/mysql -c mysqld-exporter --tail=30 || true
           kubectl -n monitoring get events --sort-by=.lastTimestamp | tail -30
