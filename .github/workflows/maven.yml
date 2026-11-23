@@ -1,29 +1,46 @@
-name: Pipeline de ms_categoria
+# =====================================================================
+# Pipeline CI/CD de ms_categoria - EP3 (observabilidad y cumplimiento)
+#
+#  1 Build + tests + cobertura ─┐
+#  2 Gitleaks (secretos)        ├─► 4 Imagen + Trivy ─► 5 Deploy K8s + verificación
+#  3a SonarQube (Quality Gate) ─┤      (y push a GHCR)
+#  3b Auditoría de cumplimiento ┘
+#
+# Cada etapa es un "gate": si una falla, las siguientes NO se ejecutan
+# y nada llega al entorno de despliegue (IE6).
+# =====================================================================
+name: Pipeline CI/CD ms_categoria
 
 on:
   push:
     branches: ["develop", "main"]
   pull_request:
-    branches: ["main"]
+    branches: ["develop", "main"]
+  workflow_dispatch:
+
+# Si llega un push nuevo a la misma rama, se cancela la ejecución anterior
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Mínimo privilegio: por defecto el token del pipeline solo puede leer el repo
+permissions:
+  contents: read
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.76.1
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
 
 jobs:
-  build:
+  # -------------------------------------------------------------------
+  # 1. CALIDAD: compila, ejecuta los tests y aplica el umbral de cobertura
+  # -------------------------------------------------------------------
+  build-test:
+    name: "1 · Build, tests y cobertura"
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Verifica contenido del repositorio
-        run: |
-          echo "Este es el contenido del repositorio"
-          tree
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -31,16 +48,23 @@ jobs:
           java-version: "17"
           distribution: "temurin"
           cache: maven
-      - name: Compilando y Ejecutando Test Unitarios
-        run: mvn -B package --file ms_categoria/pom.xml
 
-      - name: Resultado
+      # "verify" ejecuta tests + jacoco:check. Si la cobertura baja del 80%, falla aquí.
+      - name: Compilar, testear y verificar cobertura (JaCoCo >= 80%)
+        run: mvn -B clean verify --file ms_categoria/pom.xml
+
+      - name: Resumen de cobertura
+        if: always()
         run: |
-          echo "Build y Pruebas Unitarias Exitosas"
+          CSV=ms_categoria/target/site/jacoco/jacoco.csv
+          if [ -f "$CSV" ]; then
+            awk -F, 'NR>1{ml+=$8;cl+=$9;mb+=$6;cb+=$7} END{
+              printf "### Cobertura de pruebas\n\n| Métrica | Cobertura | Mínimo |\n|---|---|---|\n";
+              printf "| Líneas | %.1f%% | 80%% |\n| Ramas | %.1f%% | 80%% |\n", 100*cl/(ml+cl), (mb+cb>0?100*cb/(mb+cb):100)}' "$CSV" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      # Despues de ejecutar las pruebas unitarias se crea el reporte
-      # HTML de jacoco
-      - name: Jacoco Reporte
+      - name: Reporte JaCoCo
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: Jacoco-Reporte
@@ -57,22 +81,148 @@ jobs:
           name: Reporte-Pruebas
           path: ms_categoria/target/reports
 
+  # -------------------------------------------------------------------
+  # 2. SEGURIDAD: busca secretos (contraseñas, tokens, llaves) en TODO el historial
+  # -------------------------------------------------------------------
+  secret-scan:
+    name: "2 · Gitleaks (secretos en el código)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (historial completo)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0           # Gitleaks revisa cada commit, no solo el último
+
+      # --exit-code 1: si encuentra un secreto, el job falla y el pipeline se detiene
+      - name: Escanear secretos con Gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" "$GITLEAKS_IMAGE" \
+            git /repo --redact --verbose --exit-code 1 \
+            --report-format sarif --report-path /repo/gitleaks.sarif
+
+      - name: Reporte Gitleaks
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Gitleaks-Reporte
+          path: gitleaks.sarif
+
+  # -------------------------------------------------------------------
+  # 3a. SAST: SonarQube Cloud con Quality Gate (bugs, vulnerabilidades, cobertura de código nuevo)
+  # Corre en TODOS los push y PR (antes solo en main/PR y develop se lo saltaba).
+  # -------------------------------------------------------------------
+  sonar:
+    name: "3a · SonarQube Cloud (Quality Gate)"
+    needs: build-test
+    # Dependabot no tiene acceso a los secrets del repo, por eso se excluye
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0           # Sonar necesita el historial para detectar el "código nuevo"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: maven
+
+      # qualitygate.wait=true: espera el veredicto de Sonar; si el Quality Gate falla, el job falla
       - name: Analisis SonarQube Cloud
         id: sonar
-        if: (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && github.actor != 'dependabot[bot]'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.qualitygate.wait=true --file ms_categoria/pom.xml
+        run: >
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.qualitygate.wait=true --file ms_categoria/pom.xml
 
       - name: Alerta si falla SonarQube
         if: failure() && steps.sonar.outcome == 'failure'
         run: |
-          echo "### Analisis de SonarQube Cloud fallido" >> $GITHUB_STEP_SUMMARY
-          echo "El codigo no paso el Quality Gate. El pipeline queda bloqueado y no se publica la imagen Docker." >> $GITHUB_STEP_SUMMARY
-          echo "Detalle: https://sonarcloud.io/dashboard?id=SYST3M644_devops_007d_ols" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### Analisis de SonarQube Cloud fallido"
+            echo "El codigo no paso el Quality Gate. El pipeline queda bloqueado y no se publica la imagen Docker."
+            echo "Detalle: https://sonarcloud.io/dashboard?id=SYST3M644_devops_007d_ols"
+          } >> "$GITHUB_STEP_SUMMARY"
           echo "::error title=SonarQube Cloud::El codigo no paso el Quality Gate"
 
-    #Subimos la imagen docker desde pipeline
+  # -------------------------------------------------------------------
+  # 3b. CUMPLIMIENTO: auditoría automatizada de Dockerfile, manifiestos y configuración
+  # -------------------------------------------------------------------
+  compliance:
+    name: "3b · Auditoría de cumplimiento"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Script propio: políticas CIS / OWASP / Pod Security (ver scripts/auditoria_cumplimiento.py)
+      - name: Auditoría con script personalizado
+        run: |
+          pip install --quiet pyyaml==6.0.2
+          python3 scripts/auditoria_cumplimiento.py
+
+      # Trivy "config": revisa errores de configuración de seguridad (IaC) en Dockerfile y YAML
+      - name: Escaneo de configuración (IaC) con Trivy
+        run: |
+          docker run --rm -v "$PWD:/repo" "$TRIVY_IMAGE" config \
+            --severity HIGH,CRITICAL --exit-code 1 /repo
+
+  # -------------------------------------------------------------------
+  # 4. IMAGEN: construye, escanea vulnerabilidades (Trivy) y publica en GHCR
+  # Solo se ejecuta si TODOS los gates anteriores pasaron.
+  # -------------------------------------------------------------------
+  docker-image:
+    name: "4 · Imagen Docker + Trivy"
+    needs: [build-test, secret-scan, sonar, compliance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      imagen: ${{ steps.vars.outputs.imagen }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Trazabilidad: la imagen se etiqueta con el SHA del commit (no solo "latest")
+      - name: Nombre y etiqueta de la imagen
+        id: vars
+        run: |
+          IMAGEN="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}"
+          echo "IMAGEN=$IMAGEN" >> "$GITHUB_ENV"
+          echo "imagen=$IMAGEN" >> "$GITHUB_OUTPUT"
+
+      - name: Construir imagen
+        run: docker build --build-arg APP_VERSION="${GITHUB_SHA::7}" -t "$IMAGEN" ./ms_categoria
+
+      - name: Reporte de vulnerabilidades (HIGH y CRITICAL)
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            "$TRIVY_IMAGE" image --severity HIGH,CRITICAL --no-progress --format table "$IMAGEN" | tee trivy.txt
+          { echo "### Vulnerabilidades de la imagen (Trivy)"; echo '```'; cat trivy.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # GATE: una vulnerabilidad CRITICAL con parche disponible detiene el pipeline
+      - name: Gate de seguridad (CRITICAL = pipeline detenido)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            "$TRIVY_IMAGE" image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress "$IMAGEN"
+
+      # "Build once, deploy many": la misma imagen escaneada es la que se despliega
+      - name: Guardar imagen para el despliegue
+        run: docker save "$IMAGEN" | gzip > imagen.tar.gz
+
+      - name: Subir imagen como artefacto
+        uses: actions/upload-artifact@v7
+        with:
+          name: imagen-docker
+          path: imagen.tar.gz
+          retention-days: 1
+
       - name: Autenticacion docker
         if: github.event_name == 'push'
         uses: docker/login-action@v4
@@ -80,12 +230,80 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Nombre de imagen en minusculas
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-      - name: Subir imagen
+
+      - name: Publicar imagen en GHCR
         if: github.event_name == 'push'
-        uses: docker/build-push-action@v7
+        run: |
+          docker push "$IMAGEN"
+          RAMA_TAG="ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_REF_NAME}"
+          docker tag "$IMAGEN" "$RAMA_TAG" && docker push "$RAMA_TAG"
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            docker tag "$IMAGEN" "ghcr.io/${GITHUB_REPOSITORY,,}:latest"
+            docker push "ghcr.io/${GITHUB_REPOSITORY,,}:latest"
+          fi
+
+  # -------------------------------------------------------------------
+  # 5. DESPLIEGUE: Kubernetes efímero (kind) dentro del runner = "producción simulada".
+  # Despliega app + MySQL + Prometheus + Loki + Alloy + Jaeger + Grafana con el mismo
+  # script que se usa en local, y verifica que la observabilidad funcione.
+  # -------------------------------------------------------------------
+  deploy-k8s:
+    name: "5 · Deploy en Kubernetes + verificación"
+    needs: docker-image
+    runs-on: ubuntu-latest
+    env:
+      IMAGEN: ${{ needs.docker-image.outputs.imagen }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Descargar imagen escaneada
+        uses: actions/download-artifact@v8
         with:
-          context: ./ms_categoria
-          push: true
-          tags: ${{ env.IMAGE }}:latest
+          name: imagen-docker
+
+      - name: Cargar imagen
+        run: gunzip -c imagen.tar.gz | docker load
+
+      - name: Crear cluster Kubernetes (kind)
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ep3
+
+      - name: Cargar imagen en el cluster
+        run: kind load docker-image "$IMAGEN" --name ep3
+
+      - name: Desplegar entorno completo
+        id: deploy
+        run: ./kubernetes/desplegar.sh "$IMAGEN"
+
+      - name: Verificar microservicio y observabilidad
+        run: ./kubernetes/verificar.sh
+
+      - name: Resumen del despliegue
+        if: always()
+        run: |
+          {
+            echo "### Despliegue en Kubernetes"
+            echo ""
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Imagen | \`$IMAGEN\` |"
+            echo "| Commit | \`${GITHUB_SHA::7}\` |"
+            echo "| Tiempo de despliegue | ${{ steps.deploy.outputs.segundos || 'n/a' }} s |"
+            echo ""
+            echo '```'
+            kubectl get pods -A -o wide | grep -E "NAMESPACE|biblioteca|monitoring" || true
+            echo '```'
+            echo '```'
+            kubectl -n biblioteca rollout history deployment/ms-categoria || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnóstico si algo falló
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl -n biblioteca describe pods
+          kubectl -n biblioteca logs deployment/ms-categoria --tail=200 || true
+          kubectl -n monitoring get events --sort-by=.lastTimestamp | tail -30
