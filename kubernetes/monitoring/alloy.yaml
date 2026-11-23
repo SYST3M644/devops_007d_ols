@@ -1,0 +1,152 @@
+# =====================================================================
+# EP3 - Grafana Alloy: RECOLECTOR de logs
+# Lee la salida estándar (stdout) de cada contenedor a través de la API
+# de Kubernetes, le agrega etiquetas (namespace, app, pod, level) y la
+# envía a Loki. La app no sabe que existe Loki: solo escribe en stdout
+# (principio "12-factor": los logs son un flujo de eventos).
+# =====================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ep3-alloy
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "namespaces"]
+    verbs: ["get", "list", "watch"]     # solo lectura
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ep3-alloy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ep3-alloy
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: monitoring
+data:
+  config.alloy: |
+    // 1) Descubre los pods de nuestros namespaces
+    discovery.kubernetes "pods" {
+      role = "pod"
+      namespaces {
+        names = ["biblioteca", "monitoring"]
+      }
+    }
+
+    // 2) Convierte metadatos de Kubernetes en etiquetas para filtrar en Grafana
+    discovery.relabel "pods" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label  = "app"
+      }
+    }
+
+    // 3) Lee los logs de cada contenedor usando la API (no necesita acceso al disco del nodo)
+    loki.source.kubernetes "pods" {
+      targets    = discovery.relabel.pods.output
+      forward_to = [loki.process.json.receiver]
+    }
+
+    // 4) Si la línea es JSON (formato ECS de Spring), extrae el nivel (log.level) y el traceId
+    loki.process "json" {
+      stage.json {
+        expressions = { level = "log.level", trace_id = "traceId" }
+      }
+      stage.labels {
+        values = { level = "" }           // etiqueta indexada: permite filtrar ERROR/WARN rápido
+      }
+      stage.structured_metadata {
+        values = { trace_id = "" }        // se guarda junto a la línea, sin indexar
+      }
+      forward_to = [loki.write.default.receiver]
+    }
+
+    // 5) Envía todo a Loki
+    loki.write "default" {
+      endpoint {
+        url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  namespace: monitoring
+  labels:
+    app: alloy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alloy
+  template:
+    metadata:
+      labels:
+        app: alloy
+    spec:
+      serviceAccountName: alloy
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 473                       # usuario "alloy" de la imagen oficial
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.21.3
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+          ports:
+            - name: http
+              containerPort: 12345
+          readinessProbe:
+            httpGet: { path: /-/ready, port: http }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+            - name: datos
+              mountPath: /var/lib/alloy/data
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config
+        - name: datos
+          emptyDir: {}

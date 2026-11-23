@@ -1,0 +1,121 @@
+# =====================================================================
+# EP3 - Microservicio ms_categoria en Kubernetes (producción simulada)
+# La imagen "ms-categoria:local" es un marcador: el script de despliegue
+# (local o del pipeline) la reemplaza por la imagen versionada con el SHA
+# del commit, para que cada despliegue sea trazable hasta su código.
+# =====================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ms-categoria
+  namespace: biblioteca
+automountServiceAccountToken: false    # la app no necesita credenciales de la API de Kubernetes
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-categoria
+  namespace: biblioteca
+  labels:
+    app: ms-categoria
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5              # guarda 5 versiones para poder hacer rollback
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0                # nunca baja el pod viejo antes de que el nuevo esté Ready
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: ms-categoria
+  template:
+    metadata:
+      labels:
+        app: ms-categoria
+      annotations:
+        # Descubrimiento automático: Prometheus lee estas anotaciones y empieza a recolectar
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      serviceAccountName: ms-categoria
+      securityContext:
+        runAsNonRoot: true             # Kubernetes se niega a arrancar el pod si la imagen usa root
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: ms-categoria
+          image: ms-categoria:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8082
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: k8s                       # activa application-k8s.yml (logs JSON, trazas, sin Eureka)
+            - name: APP_ENV
+              value: k8s-local
+            - name: DB_HOST
+              value: mysql                     # nombre del Service de MySQL
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: bd_categorias
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: mysql-credentials, key: username }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-credentials, key: password }
+            - name: OTLP_TRACES_ENDPOINT
+              value: http://jaeger.monitoring.svc.cluster.local:4318/v1/traces
+          # startup: da hasta 3 minutos para arrancar (Spring Boot es lento con poca RAM).
+          # Mientras no pase, liveness y readiness no se evalúan.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          # liveness: si la app se cuelga, Kubernetes la reinicia. Debe ser CONSERVADORA:
+          # con los valores por defecto (timeout 1 s, 3 fallos) la app se reiniciaba sola
+          # cuando el PC estaba con la CPU al máximo (lección aprendida en las pruebas).
+          # Ahora solo reinicia si no responde durante ~1 minuto (6 fallos x 10 s).
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # readiness: si la app o su base de datos no están listas, deja de recibir tráfico
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 384Mi }   # lo que el scheduler le reserva
+            limits: { cpu: "1", memory: 512Mi }      # el máximo; si lo supera en memoria, se reinicia (OOMKilled)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true       # nadie puede modificar el sistema de archivos del contenedor
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp                  # único lugar escribible (lo necesita Tomcat)
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-categoria
+  namespace: biblioteca
+  labels:
+    app: ms-categoria
+spec:
+  type: ClusterIP
+  selector:
+    app: ms-categoria
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http

@@ -1,0 +1,233 @@
+# =====================================================================
+# EP3 - Prometheus: recolecta y guarda MÉTRICAS (series de tiempo)
+# Modelo "pull": cada 15 s visita /actuator/prometheus del microservicio
+# y /metrics del exporter de MySQL. Además evalúa reglas de ALERTA.
+# =====================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+# Permisos de SOLO LECTURA para descubrir pods y leer el uso de CPU/memoria (cAdvisor).
+# Mínimo privilegio: "nodes/metrics" y NO "nodes/proxy" (que permitiría ejecutar
+# comandos en el nodo; Trivy lo marca como KSV-0047 HIGH).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ep3-prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ep3-prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ep3-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s          # cada cuánto se recolectan métricas
+      evaluation_interval: 15s      # cada cuánto se evalúan las alertas
+      external_labels:
+        environment: k8s-local
+
+    rule_files:
+      - /etc/prometheus/alertas.yml
+
+    scrape_configs:
+      # 1) El propio Prometheus
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # 2) Todo pod con la anotación prometheus.io/scrape="true" (ms-categoria y MySQL)
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            regex: (.+)
+            target_label: __metrics_path__
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+
+      # 3) Uso real de CPU y memoria de cada contenedor: cAdvisor, integrado en el kubelet
+      #    de cada nodo (puerto 10250). Se autentica con el token del ServiceAccount.
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        tls_config:
+          # el kubelet usa un certificado autofirmado (igual que en kube-prometheus);
+          # el tráfico no sale de la red interna del cluster
+          insecure_skip_verify: true
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node            # descubre los nodos; __address__ = IP interna:10250 (kubelet)
+        metric_relabel_configs:
+          # se guardan solo las métricas y namespaces que usamos (ahorra RAM)
+          - source_labels: [__name__]
+            regex: container_cpu_usage_seconds_total|container_memory_working_set_bytes|container_spec_memory_limit_bytes
+            action: keep
+          - source_labels: [namespace]
+            regex: biblioteca|monitoring
+            action: keep
+
+  alertas.yml: |
+    groups:
+      - name: disponibilidad
+        rules:
+          - alert: MicroservicioCaido
+            expr: up{app="ms-categoria"} == 0 or absent(up{app="ms-categoria"})
+            for: 1m
+            labels: { severity: critical }
+            annotations:
+              summary: "ms-categoria no responde"
+              description: "Prometheus no logra leer /actuator/prometheus hace más de 1 minuto."
+          - alert: MySQLCaido
+            expr: mysql_up == 0 or absent(mysql_up)
+            for: 1m
+            labels: { severity: critical }
+            annotations:
+              summary: "MySQL no responde"
+              description: "El exporter no puede conectarse a la base de datos."
+      - name: errores-y-rendimiento
+        rules:
+          - alert: TasaErrores5xxAlta
+            expr: |
+              sum(rate(http_server_requests_seconds_count{application="categorias", status=~"5.."}[5m]))
+                / sum(rate(http_server_requests_seconds_count{application="categorias"}[5m])) > 0.05
+            for: 2m
+            labels: { severity: critical }
+            annotations:
+              summary: "Más del 5% de las peticiones terminan en error 5xx"
+          - alert: TasaErrores4xxAlta
+            expr: |
+              sum(rate(http_server_requests_seconds_count{application="categorias", status=~"4.."}[5m]))
+                / sum(rate(http_server_requests_seconds_count{application="categorias"}[5m])) > 0.20
+            for: 2m
+            labels: { severity: warning }
+            annotations:
+              summary: "Más del 20% de las peticiones terminan en error 4xx"
+          - alert: LatenciaP95Alta
+            expr: |
+              histogram_quantile(0.95, sum by (le) (
+                rate(http_server_requests_seconds_bucket{application="categorias", uri!~"/actuator.*"}[5m]))) > 1
+            for: 5m
+            labels: { severity: warning }
+            annotations:
+              summary: "El 5% más lento de las peticiones tarda más de 1 segundo"
+          - alert: MemoriaHeapAlta
+            expr: |
+              sum(jvm_memory_used_bytes{application="categorias", area="heap"})
+                / sum(jvm_memory_max_bytes{application="categorias", area="heap"} > 0) > 0.90
+            for: 5m
+            labels: { severity: warning }
+            annotations:
+              summary: "La JVM usa más del 90% del heap disponible"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534                       # usuario "nobody"
+        fsGroup: 65534
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.15.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=2d   # entorno de demo: se guardan 2 días
+            - --web.enable-lifecycle
+          ports:
+            - name: http
+              containerPort: 9090
+          readinessProbe:
+            httpGet: { path: /-/ready, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /-/healthy, port: http }
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 192Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: datos
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: datos
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
