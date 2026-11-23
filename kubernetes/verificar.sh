@@ -16,6 +16,12 @@ kubectl -n monitoring port-forward svc/loki         13100:3100 >/dev/null 2>&1 &
 kubectl -n monitoring port-forward svc/jaeger       26686:16686 >/dev/null 2>&1 &
 trap 'kill $(jobs -p) 2>/dev/null || true' EXIT
 sleep 5
+# Si un puerto ya está ocupado (por ejemplo, paneles.sh abierto), kubectl termina al tiro
+if [ "$(jobs -rp | wc -l)" -lt 4 ]; then
+  echo "ERROR: no se pudieron abrir los túneles (¿puertos 18082/19090/13100/26686 ocupados?)."
+  echo "Cierra paneles.sh u otros 'kubectl port-forward' y vuelve a intentar."
+  exit 1
+fi
 
 APP=http://localhost:18082
 PROM=http://localhost:19090
