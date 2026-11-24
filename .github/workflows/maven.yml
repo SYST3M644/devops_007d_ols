@@ -109,13 +109,13 @@ jobs:
 
   # -------------------------------------------------------------------
   # 3a. SAST: SonarQube Cloud con Quality Gate (bugs, vulnerabilidades, cobertura de código nuevo)
-  # Corre en TODOS los push y PR (antes solo en main/PR y develop se lo saltaba).
+  # Corre en los PR y en main: el plan gratis de SonarCloud no analiza otras ramas (develop).
   # -------------------------------------------------------------------
   sonar:
     name: "3a · SonarQube Cloud (Quality Gate)"
     needs: build-test
     # Dependabot no tiene acceso a los secrets del repo, por eso se excluye
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -172,6 +172,8 @@ jobs:
   docker-image:
     name: "4 · Imagen Docker + Trivy"
     needs: [build-test, secret-scan, sonar, compliance]
+    # Si un gate falla se detiene; si Sonar se salta (push a develop o Dependabot), sigue
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -244,6 +246,8 @@ jobs:
   deploy-k8s:
     name: "5 · Deploy en Kubernetes + verificación"
     needs: docker-image
+    # Solo si la imagen se construyó y pasó Trivy
+    if: ${{ !cancelled() && needs.docker-image.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       IMAGEN: ${{ needs.docker-image.outputs.imagen }}
