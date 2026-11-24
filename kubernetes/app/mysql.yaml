@@ -1,0 +1,152 @@
+# =====================================================================
+# EP3 - Base de datos MySQL del microservicio (producción simulada)
+# Incluye un "sidecar" (mysqld-exporter) que publica métricas de MySQL
+# para Prometheus: así se monitorean TODOS los componentes, no solo la app.
+# Las credenciales vienen del Secret "mysql-credentials", que crea el
+# script de despliegue con contraseñas aleatorias (nunca se guardan en git).
+# =====================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-data
+  namespace: biblioteca
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi                     # los datos sobreviven aunque el pod se reinicie
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: biblioteca
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate                     # el volumen RWO solo lo puede usar un pod a la vez
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+      annotations:
+        # Prometheus descubre este pod y lee las métricas del exporter
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9104"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false   # MySQL no necesita hablar con la API de Kubernetes
+      # MySQL corre directamente con su usuario (999), nunca como root.
+      # (Corrige los hallazgos KSV-0014 y KSV-0118 que detectó Trivy en el pipeline)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999                        # el volumen de datos queda con permisos para el grupo mysql
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mysql
+          image: mysql:8.4.10                # versión exacta (con "mysql:8.4" cada despliegue podría bajar una distinta)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true      # solo puede escribir en los volúmenes montados
+            capabilities: { drop: ["ALL"] }
+          # Ajustes para un PC con poca RAM: buffer pequeño y sin performance_schema
+          args: ["--innodb-buffer-pool-size=64M", "--performance-schema=OFF"]
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: MYSQL_DATABASE
+              value: bd_categorias
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-credentials, key: root-password }
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef: { name: mysql-credentials, key: username }
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-credentials, key: password }
+          # readiness: ¿puede recibir conexiones? Si falla, el Service deja de enviarle tráfico
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -u\"$MYSQL_USER\" -p\"$MYSQL_PASSWORD\" --silent"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          # liveness: ¿sigue vivo? Si falla 3 veces seguidas, Kubernetes reinicia el contenedor
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -u\"$MYSQL_USER\" -p\"$MYSQL_PASSWORD\" --silent"]
+            initialDelaySeconds: 90
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            - name: datos
+              mountPath: /var/lib/mysql
+            - name: run-mysqld
+              mountPath: /var/run/mysqld      # socket y pid de MySQL
+            - name: tmp
+              mountPath: /tmp
+        # ---- Sidecar: exporter de métricas de MySQL (mysql_up, conexiones, consultas...) ----
+        - name: mysqld-exporter
+          image: prom/mysqld-exporter:v0.21.0
+          # Se conecta con el mismo usuario de la app (siempre existe, lo crea MySQL al iniciar).
+          # En producción se crearía un usuario aparte de solo lectura para el exporter.
+          args:
+            - --mysqld.address=127.0.0.1:3306   # comparte la red del pod con MySQL
+            - --mysqld.username=$(DB_USER)      # Kubernetes reemplaza $(DB_USER) con la variable de abajo
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: mysql-credentials, key: username }
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-credentials, key: password }
+          ports:
+            - name: metrics
+              containerPort: 9104
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 64Mi }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534                  # "nobody" (numérico, para que Kubernetes lo pueda verificar)
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+      volumes:
+        - name: datos
+          persistentVolumeClaim:
+            claimName: mysql-data
+        - name: run-mysqld
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql                          # el microservicio se conecta usando este nombre (DNS interno)
+  namespace: biblioteca
+  labels:
+    app: mysql
+spec:
+  type: ClusterIP                      # solo accesible dentro del cluster
+  selector:
+    app: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql

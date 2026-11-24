@@ -1,0 +1,74 @@
+# =====================================================================
+# EP3 - Jaeger: TRAZAS distribuidas (trazabilidad de cada petición)
+# El microservicio envía, por OTLP, un "span" por cada operación (HTTP,
+# consulta SQL...). Jaeger los agrupa por traceId y muestra el recorrido
+# completo de una petición y cuánto tardó cada paso.
+# Modo "all-in-one" con almacenamiento en memoria (entorno de demo).
+# =====================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: jaeger
+          # 2.20.0: última versión que mantiene la API /api/* que usa el datasource Jaeger de Grafana
+          # (desde 2.21 solo existe /api/v3 y Grafana responde 404). Verificado en este proyecto.
+          image: jaegertracing/jaeger:2.20.0
+          ports:
+            - name: ui
+              containerPort: 16686        # interfaz web
+            - name: otlp-grpc
+              containerPort: 4317         # recepción de trazas OTLP (gRPC)
+            - name: otlp-http
+              containerPort: 4318         # recepción de trazas OTLP (HTTP) <- la usa Spring
+            - name: health
+              containerPort: 13133
+          readinessProbe:
+            httpGet: { path: /status, port: health }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+spec:
+  selector:
+    app: jaeger
+  ports:
+    - name: ui
+      port: 16686
+      targetPort: ui
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http

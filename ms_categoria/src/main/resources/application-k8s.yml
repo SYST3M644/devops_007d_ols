@@ -1,0 +1,35 @@
+# ===================================================================
+# Perfil "k8s": se activa en el cluster con SPRING_PROFILES_ACTIVE=k8s
+# Representa el entorno de "producción simulada" del EP3.
+# Solo contiene lo que cambia respecto de application.yml.
+# ===================================================================
+spring:
+  jpa:
+    show-sql: false              # el SQL crudo rompe el formato JSON de los logs y expone datos
+
+eureka:
+  client:
+    enabled: false               # en Kubernetes el Service hace el descubrimiento, no Eureka
+
+logging:
+  structured:
+    format:
+      console: ecs               # logs en JSON (Elastic Common Schema): una línea por evento
+    ecs:
+      service:
+        environment: ${APP_ENV:k8s-local}
+  level:
+    root: INFO
+    cl.syst3m64.categorias: INFO # en producción no se usa DEBUG
+
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          # "lista para recibir tráfico" = la app arrancó Y la base de datos responde
+          include: readinessState,db
+  tracing:
+    export:
+      otlp:
+        enabled: true            # aquí sí se envían las trazas a Jaeger

@@ -1,0 +1,24 @@
+# =====================================================================
+# EP3 - Namespaces
+# Se separa la aplicación ("biblioteca") del stack de observabilidad
+# ("monitoring"): cada uno tiene sus propios permisos y ciclo de vida.
+# =====================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: biblioteca
+  labels:
+    app.kubernetes.io/part-of: biblioteca-online
+    # Pod Security Admission (política de cumplimiento aplicada por el propio cluster):
+    # enforce=restricted -> Kubernetes RECHAZA cualquier pod que corra como root, que pueda
+    # escalar privilegios, que no descarte las capabilities o que no use seccomp.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/part-of: observabilidad
+    pod-security.kubernetes.io/enforce: baseline
