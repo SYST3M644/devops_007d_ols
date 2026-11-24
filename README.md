@@ -715,16 +715,6 @@ Requiere Docker Desktop con Kubernetes activado y Git Bash. Desde la raíz del r
 | Grafana: Recursos | CPU y memoria por contenedor, y heap de la JVM |
 | Grafana: Logs | Logs por nivel, conexiones y consultas de MySQL, y los logs del microservicio |
 
-## IE4: Cómo esto ayuda a tomar decisiones
-
-| Herramienta | Qué información entrega | Qué decisión permite tomar |
-|---|---|---|
-| Prometheus y sus alertas | Disponibilidad, errores y latencia en el tiempo | ✍️ |
-| Grafana | Todo en un panel: tráfico, errores, latencia, CPU y memoria | ✍️ |
-| Loki | Los logs de error con su `traceId` | ✍️ |
-| Jaeger | El recorrido y la duración de cada petición | ✍️ |
-| Resumen del pipeline | Cobertura, vulnerabilidades y tiempo de despliegue | ✍️ |
-| Trivy y SonarQube | Vulnerabilidades y calidad antes de desplegar | ✍️ |
 
 ## IE5: Políticas de cumplimiento
 
@@ -739,7 +729,7 @@ Requiere Docker Desktop con Kubernetes activado y Git Bash. Desde la raíz del r
 | Pod Security Standards | Namespace `biblioteca` en `restricted` | Sin privilegios, sin escalar permisos, capacidades eliminadas y perfil seccomp | Sí, Kubernetes rechaza el pod |
 | Mínimo privilegio del pipeline | `permissions: contents: read` | El token del pipeline solo lee el repo; solo el job 4 puede publicar imágenes | — |
 | Dependencias al día | Dependabot | Versiones nuevas o vulnerables de librerías, imágenes y acciones | No, propone PRs a `develop` |
-| Protección de `main` | Ruleset de GitHub | Cambios solo por PR, sin force push y sin borrar la rama | ⚠️ Pendiente de aplicar a `main` |
+
 
 **Seguridad del contenedor en Kubernetes** (`app/ms-categoria.yaml`)
 
