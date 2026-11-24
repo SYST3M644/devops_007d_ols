@@ -777,7 +777,8 @@ Cada job es un *gate*. Con `needs`, el job 4 espera a los jobs 1, 2, 3a y 3b, y 
 
 Problemas registrados en los commits: 
 
-- Trivy bloqueó la imagen por 10 CVE CRITICAL de Spring Boot 4.0.6 (se actualizó a 4.0.9).
+- Trivy bloqueó la imagen por 10 CVE CRITICAL de Spring Boot 4.0.6 (se actualizó a 4.0.9 y después a 4.1.3).
+- Spring Boot 4.2.0, propuesto por Dependabot, no es compatible con Spring Cloud 2025.1.x y la app no arrancaba (se usó 4.1.3, la última versión compatible).
 - Con `mysql:8.4`, cada despliegue podía bajar una versión distinta (se fijó `mysql:8.4.10`).
 - El exporter de MySQL no se conectaba y fallaba la verificación (ahora usa el usuario de la app).
 - `verificar.sh` fallaba si los puertos estaban ocupados por `paneles.sh` (ahora avisa y se detiene).
@@ -799,5 +800,9 @@ realmente me costo entender los conceptos al no tener una cuenta de AWS para clo
 
 ### Reflexión de Abel Aylas
 
-> ✍️ **Pendiente (sin IA).**
+Yo, Abel Aylas, tuve un problema con develop: quedo en rojo porque el plan gratis de SonarCloud no analiza otras ramas, y aprendi que sonar solo analiza el main.
+
+Tambien tuve un error con la version de spring boot. Me ayude un poco con IA para encontrar y resolver el bug, y cambiando a una version mas actual de spring boot, la 4.1.3, trabajo mejor y sin errores.
+
+El trivy nos detecto vulnerabilidades y el pipeline no lo dejo pasar porque encontro esa falla. Eso es bueno, porque nos hace ver que nuestro sistema funciona y esta apto para detectar vulnerabilidades.
 
