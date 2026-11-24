@@ -2,7 +2,7 @@
 
 Microservicio REST desarrollado para la asignatura de DevOps. Administra el catálogo de categorías de libros de la Biblioteca Online y se registra en Eureka para que los demás microservicios del sistema lo puedan descubrir.
 
-Este README está dividido en dos partes: la [Evaluación Parcial 1](#evaluación-parcial-1) (microservicio, GitFlow y pipeline de integración continua básico) y la [Evaluación Parcial 2](#evaluación-parcial-2) (contenedores, orquestación, pruebas con reportes, análisis de seguridad y publicación de la imagen).
+Este README está dividido en tres partes: la [Evaluación Parcial 1](#evaluación-parcial-1) (microservicio, GitFlow y pipeline de integración continua básico), la [Evaluación Parcial 2](#evaluación-parcial-2) (contenedores, orquestación, pruebas con reportes, análisis de seguridad y publicación de la imagen) y la [Evaluación Parcial 3](#evaluación-parcial-3) (observabilidad, despliegue en Kubernetes y políticas de cumplimiento).
 
 ## Integrantes
 
@@ -39,6 +39,21 @@ Este README está dividido en dos partes: la [Evaluación Parcial 1](#evaluació
 - [Tecnologías agregadas](#tecnologías-agregadas)
 - [Uso de IA en esta evaluación](#uso-de-ia-en-esta-evaluación)
 - [Conclusiones](#conclusiones)
+
+**Evaluación Parcial 3**
+
+- [De qué trata](#de-qué-trata-1)
+- [Arquitectura](#arquitectura-1)
+- [Decisión: Kubernetes local en vez de AWS](#decisión-kubernetes-local-en-vez-de-aws)
+- [IE1: Monitoreo y logs](#ie1-monitoreo-y-logs)
+- [IE2: Despliegue en Kubernetes](#ie2-despliegue-en-kubernetes)
+- [IE3: Dashboards](#ie3-dashboards)
+- [IE4: Cómo esto ayuda a tomar decisiones](#ie4-cómo-esto-ayuda-a-tomar-decisiones)
+- [IE5: Políticas de cumplimiento](#ie5-políticas-de-cumplimiento)
+- [IE6: El pipeline se detiene ante fallas](#ie6-el-pipeline-se-detiene-ante-fallas)
+- [Problemas encontrados y cómo se resolvieron](#problemas-encontrados-y-cómo-se-resolvieron)
+- [Uso de inteligencia artificial](#uso-de-inteligencia-artificial-1)
+- [Reflexiones individuales](#reflexiones-individuales)
 
 ---
 
@@ -522,4 +537,273 @@ Aprendi a usar jacoco para validar la cobertura del codigo. Teniamos pocos test,
 Y tambien aprendi a usar Dependabot como SCA para ver vulnerabilidades de codigo, y tambien SonarQube, que me sirvio para ver la calidad del codigo, en la cual detecto dos fallas o posibles vulneraciones sobre el ID, ya que el ID es un parametro que no puede viajar en JSON, y nos recomienda usar un DTO para que esos datos no viajen en el JSON.
 
 Tambien con el apoyo de mi compañero Manuel, que con el pudimos implementar todo el sistema de Dockerfile. Me costo un poco integrarme a las clases, por eso no pude ver bien el Docker Compose o el empaquetado de imagen o el Pipeline de maven.yml, pero si recuerdo algo del semestre anterior sobre el empaquetado de imagen con Dockerfile. El apoyo de mi compañero Manuel fue fundamental para sacar el proyecto adelante.
+
+---
+
+# Evaluación Parcial 3
+
+## De qué trata
+
+La EP3 pedía que el microservicio se pudiera monitorear, desplegar de forma automática y controlar con políticas de cumplimiento. Sobre el mismo ms_categoria agregamos observabilidad (métricas, logs y trazas), un despliegue completo en Kubernetes que el pipeline hace solo en cada ejecución, y gates de seguridad y calidad que detienen el pipeline cuando algo no cumple.
+
+## Arquitectura
+
+> Diagrama elaborado con apoyo de IA (Claude) y revisado por el equipo.
+
+```mermaid
+flowchart LR
+  subgraph cluster["Cluster Kubernetes (kind en el pipeline / Docker Desktop en el PC)"]
+    subgraph bib["namespace biblioteca · Pod Security: restricted"]
+      app["ms-categoria<br/>Spring Boot :8082"]
+      db[("MySQL 8.4.10<br/>+ mysqld-exporter :9104")]
+    end
+    subgraph mon["namespace monitoring · Pod Security: baseline"]
+      prom["Prometheus<br/>métricas y alertas"]
+      alloy["Alloy<br/>recolector de logs"]
+      loki["Loki<br/>logs"]
+      jaeger["Jaeger<br/>trazas"]
+      graf["Grafana<br/>dashboard"]
+    end
+  end
+  app -->|JDBC| db
+  prom -->|lee /actuator/prometheus cada 15 s| app
+  prom -->|lee métricas de MySQL| db
+  app -->|envía trazas OTLP :4318| jaeger
+  alloy -->|lee los logs de los pods| app
+  alloy -->|los envía| loki
+  graf --> prom
+  graf --> loki
+  graf --> jaeger
+```
+
+| Componente | Imagen | Función |
+|---|---|---|
+| ms-categoria | `ghcr.io/syst3m644/devops_007d_ols:sha-<commit>` | El microservicio. Expone `/actuator/health`, `/actuator/info` y `/actuator/prometheus`, y envía sus trazas a Jaeger |
+| MySQL | `mysql:8.4.10` | Base de datos, con un volumen persistente de 1 Gi |
+| mysqld-exporter | `prom/mysqld-exporter:v0.21.0` | Contenedor *sidecar* junto a MySQL que publica sus métricas (`mysql_up`, conexiones, consultas) |
+| Prometheus | `prom/prometheus:v3.15.1` | Recolecta métricas cada 15 s (app, MySQL y CPU/memoria de los contenedores) y evalúa 6 reglas de alerta |
+| Alloy | `grafana/alloy:v1.21.3` | Descubre los pods, lee sus logs y los envía a Loki |
+| Loki | `grafana/loki:3.6.22` | Guarda y permite consultar los logs |
+| Jaeger | `jaegertracing/jaeger:2.20.0` | Recibe las trazas por OpenTelemetry (OTLP) y las muestra |
+| Grafana | `grafana/grafana:13.0.12` | Dashboard del microservicio, con Prometheus, Loki y Jaeger como fuentes de datos |
+
+Todos los servicios son `ClusterIP`: no quedan expuestos fuera del cluster. Para verlos desde el PC se usan túneles (`kubectl port-forward`) con `paneles.sh`.
+
+## Decisión: Kubernetes local en vez de AWS
+
+| Servicio de AWS | Para qué sirve | Lo que usamos en su lugar |
+|---|---|---|
+| Amazon EKS | Kubernetes administrado | Kubernetes local: `kind` en el pipeline y Kubernetes de Docker Desktop en el PC |
+| CloudWatch Metrics y Alarms | Métricas y alarmas | Prometheus y sus reglas de alerta |
+| CloudWatch Logs | Logs centralizados | Loki + Alloy |
+| CloudWatch Dashboards | Paneles | Grafana |
+| AWS X-Ray | Trazas distribuidas | Jaeger con OpenTelemetry |
+| Amazon ECR | Registro de imágenes | GitHub Container Registry (`ghcr.io`) |
+| AWS Secrets Manager | Secretos | Secrets de Kubernetes y GitHub Secrets |
+
+Importante no se utilizo proceso en la nube, por simplemente la justificacion, no nos encontrabamos con credenciales y ademas si es un sistema de costeo
+
+## IE1: Monitoreo y logs
+
+**Qué se mide y dónde se ve**
+
+| Qué se mide | Cómo se obtiene | Dónde se ve |
+|---|---|---|
+| Disponibilidad | `up{app="ms-categoria"}`, `mysql_up` y los probes de Kubernetes (`/actuator/health/liveness` y `readiness`) | Grafana (paneles Microservicio, MySQL y Tiempo activo) y Prometheus |
+| Tráfico | `http_server_requests_seconds_count`: peticiones por segundo y por código HTTP | Grafana |
+| Errores | Porcentaje de respuestas 4xx y 5xx, y logs WARN/ERROR del `GlobalExceptionHandler` | Grafana y Loki |
+| Latencia | Histograma de `http.server.requests`: percentiles p50, p95 y p99 | Grafana |
+| CPU y memoria | Métricas de cAdvisor por contenedor y uso del heap de la JVM | Grafana |
+| Base de datos | Conexiones y consultas de MySQL (mysqld-exporter) | Grafana |
+| Logs | En Kubernetes, la app escribe logs en JSON (formato ECS), una línea por evento y con su `traceId` | Loki, consultado desde Grafana |
+| Trazas | Cada petición HTTP y sus consultas a la base, marcadas con la versión desplegada (`service.version`) | Jaeger (servicio `categorias`) |
+
+Las rutas `/actuator` quedan fuera de las trazas y de la métrica de peticiones (`ObservabilidadConfig`), porque Prometheus y Kubernetes las consultan cada pocos segundos y taparían las peticiones reales.
+
+**Cambios en el microservicio**
+
+| Archivo | Cambio |
+|---|---|
+| `pom.xml` | Dependencias `spring-boot-starter-actuator`, `micrometer-registry-prometheus` y `spring-boot-starter-opentelemetry` |
+| `application.yml` | Endpoints de Actuator (`health`, `info`, `prometheus`, `metrics`), probes, percentiles de latencia y configuración de trazas |
+| `application-k8s.yml` | Perfil para Kubernetes: logs JSON, nivel INFO, readiness que incluye la base de datos y envío de trazas a Jaeger |
+| `ObservabilidadConfig.java` | Excluye `/actuator` de trazas y métricas |
+| `GlobalExceptionHandler.java` | Cada error que se responde también queda en el log (WARN para 400 y 404, ERROR para fallas no controladas) |
+
+**Alertas configuradas en Prometheus**
+
+| Alerta | Se activa cuando | Severidad |
+|---|---|---|
+| `MicroservicioCaido` | El microservicio no responde durante 1 min | critical |
+| `MySQLCaido` | MySQL no responde durante 1 min | critical |
+| `TasaErrores5xxAlta` | Más del 5% de las peticiones terminan en 5xx durante 2 min | critical |
+| `TasaErrores4xxAlta` | Más del 20% de las peticiones terminan en 4xx durante 2 min | warning |
+| `LatenciaP95Alta` | El p95 supera 1 segundo durante 5 min | warning |
+| `MemoriaHeapAlta` | La JVM usa más del 90% del heap durante 5 min | warning |
+
+## IE2: Despliegue en Kubernetes
+
+**Carpeta `kubernetes/`**
+
+| Archivo | Qué contiene |
+|---|---|
+| `00-namespaces.yaml` | Namespaces `biblioteca` (Pod Security `restricted`) y `monitoring` (`baseline`) |
+| `app/ms-categoria.yaml` | ServiceAccount, Deployment (probes, recursos y seguridad) y Service del microservicio |
+| `app/mysql.yaml` | Volumen persistente, Deployment de MySQL con el sidecar mysqld-exporter, y Service |
+| `monitoring/prometheus-server.yaml` | Prometheus, qué métricas recolecta y las 6 reglas de alerta |
+| `monitoring/alloy.yaml` | Alloy: descubre los pods, lee sus logs y los envía a Loki |
+| `monitoring/loki.yaml` | Loki |
+| `monitoring/jaeger.yaml` | Jaeger |
+| `monitoring/grafana.yaml` | Grafana con sus fuentes de datos (Prometheus, Loki y Jaeger) |
+| `monitoring/dashboards/ms-categoria.json` | Dashboard del microservicio |
+| `desplegar.sh` | Despliega todo en 6 pasos y mide el tiempo de despliegue |
+| `verificar.sh` | 12 verificaciones después del despliegue |
+| `local.sh` | Construye la imagen y la despliega en el Kubernetes de Docker Desktop |
+| `paneles.sh` | Abre túneles hacia la app, Grafana, Prometheus y Jaeger, y muestra la clave de Grafana |
+
+**Despliegue automático en el pipeline (job 5)**
+
+1. Crea un cluster Kubernetes temporal con `kind` dentro del runner de GitHub Actions.
+2. Carga la **misma imagen** que construyó y escaneó el job 4 ("build once, deploy many").
+3. Ejecuta `desplegar.sh`: namespaces, secretos con contraseñas aleatorias, stack de observabilidad, MySQL y microservicio. Si algo no queda listo a tiempo, el pipeline falla.
+4. Ejecuta `verificar.sh`: 7 verificaciones del microservicio (health, readiness, GET 200, POST inválido 400, id inexistente 404, versión en `/actuator/info` y métricas) y 5 de observabilidad (app y MySQL en Prometheus, reglas de alerta cargadas, logs en Loki y trazas en Jaeger).
+5. Deja un resumen con la imagen, el commit, el tiempo de despliegue, los pods y el historial de despliegues. Si falla, muestra el diagnóstico de los pods.
+
+**Despliegue en el PC**
+
+Requiere Docker Desktop con Kubernetes activado y Git Bash. Desde la raíz del repositorio:
+
+```bash
+./kubernetes/local.sh      # construye la imagen con el SHA del commit y despliega todo
+./kubernetes/verificar.sh  # comprueba que todo funcione
+./kubernetes/paneles.sh    # abre la app, Grafana, Prometheus y Jaeger (Ctrl+C para cerrar)
+```
+
+| Panel | Dirección |
+|---|---|
+| Microservicio | http://localhost:8082/api/category |
+| Grafana | http://localhost:3000 (usuario y clave los muestra `paneles.sh`) |
+| Prometheus | http://localhost:9090 |
+| Jaeger | http://localhost:16686 |
+
+**Trazabilidad: qué versión está corriendo**
+
+| Dónde | Qué muestra |
+|---|---|
+| Etiqueta de la imagen | `sha-<commit>`, el nombre de la rama y `latest` (solo en `main`) |
+| Labels de la imagen | `org.opencontainers.image.revision` con el SHA del commit |
+| `/actuator/info` | Nombre, versión (SHA) y entorno de la app |
+| `kubectl rollout history` | Cada despliegue con la imagen y la fecha (`change-cause`) |
+| Trazas en Jaeger | Atributo `service.version` con el SHA |
+| Resumen del job 5 | Imagen, commit y tiempo de despliegue |
+
+**Configuración del Deployment del microservicio**
+
+- **Probes:** `startupProbe` y `livenessProbe` en `/actuator/health/liveness`; `readinessProbe` en `/actuator/health/readiness`, que solo responde UP si la base de datos también responde.
+- **Recursos:** pide 100m de CPU y 384 Mi de memoria, con límites de 1 CPU y 512 Mi. La JVM usa como máximo el 60% de la memoria para el heap (`-XX:MaxRAMPercentage=60.0`).
+
+## IE3: Dashboards
+
+| Dónde | Qué se ve |
+|---|---|
+| Resumen del job 1 | Cobertura de líneas y ramas, comparada con el mínimo de 80% |
+| Resumen del job 4 | Vulnerabilidades HIGH y CRITICAL de la imagen (Trivy) |
+| Resumen del job 5 | Imagen, commit, tiempo de despliegue, pods y historial de despliegues |
+| Artifacts del pipeline | Reportes HTML de JaCoCo y Surefire |
+| Grafana: Disponibilidad | Estado del microservicio y de MySQL, tiempo activo, peticiones por segundo, % de errores y latencia p95 |
+| Grafana: Tráfico y errores | Peticiones por código HTTP y latencia p50, p95 y p99 |
+| Grafana: Recursos | CPU y memoria por contenedor, y heap de la JVM |
+| Grafana: Logs | Logs por nivel, conexiones y consultas de MySQL, y los logs del microservicio |
+
+## IE4: Cómo esto ayuda a tomar decisiones
+
+| Herramienta | Qué información entrega | Qué decisión permite tomar |
+|---|---|---|
+| Prometheus y sus alertas | Disponibilidad, errores y latencia en el tiempo | ✍️ |
+| Grafana | Todo en un panel: tráfico, errores, latencia, CPU y memoria | ✍️ |
+| Loki | Los logs de error con su `traceId` | ✍️ |
+| Jaeger | El recorrido y la duración de cada petición | ✍️ |
+| Resumen del pipeline | Cobertura, vulnerabilidades y tiempo de despliegue | ✍️ |
+| Trivy y SonarQube | Vulnerabilidades y calidad antes de desplegar | ✍️ |
+
+## IE5: Políticas de cumplimiento
+
+| Política | Herramienta | Qué controla | ¿Bloquea? |
+|---|---|---|---|
+| Cobertura mínima | JaCoCo (`jacoco:check`) | Al menos 80% de líneas y de ramas cubiertas por pruebas | Sí, en el job 1 |
+| Secretos en el código | Gitleaks | Contraseñas, tokens o llaves en **todo** el historial de commits | Sí, en el job 2 |
+| Calidad del código | SonarQube Cloud (Quality Gate) | Bugs, vulnerabilidades, duplicación y hotspots del código nuevo | Sí, en el job 3a (PR y `main`) |
+| Configuración segura | Trivy `config` | Errores de seguridad HIGH y CRITICAL en el Dockerfile y los manifiestos | Sí, en el job 3b |
+| Vulnerabilidades de la imagen | Trivy `image` | CVE CRITICAL que ya tienen parche | Sí, en el job 4 |
+| Contenedor sin root | Dockerfile (`USER 10001`) y `runAsNonRoot` | Que la app nunca corra como root (CIS Docker Benchmark 4.1) | Sí, Kubernetes no arranca el pod |
+| Pod Security Standards | Namespace `biblioteca` en `restricted` | Sin privilegios, sin escalar permisos, capacidades eliminadas y perfil seccomp | Sí, Kubernetes rechaza el pod |
+| Mínimo privilegio del pipeline | `permissions: contents: read` | El token del pipeline solo lee el repo; solo el job 4 puede publicar imágenes | — |
+| Dependencias al día | Dependabot | Versiones nuevas o vulnerables de librerías, imágenes y acciones | No, propone PRs a `develop` |
+| Protección de `main` | Ruleset de GitHub | Cambios solo por PR, sin force push y sin borrar la rama | ⚠️ Pendiente de aplicar a `main` |
+
+**Seguridad del contenedor en Kubernetes** (`app/ms-categoria.yaml`)
+
+- `runAsNonRoot: true`: si la imagen intentara correr como root, Kubernetes no la arranca.
+- `readOnlyRootFilesystem: true`: nadie puede modificar el sistema de archivos del contenedor.
+- `allowPrivilegeEscalation: false` y `capabilities: drop: ["ALL"]`: sin forma de ganar más permisos.
+- `seccompProfile: RuntimeDefault`: limita las llamadas al sistema operativo.
+- Las contraseñas de MySQL y Grafana se generan al azar al crear el entorno y se guardan como Secrets: nunca están en el repositorio.
+
+## IE6: El pipeline se detiene ante fallas
+
+```mermaid
+flowchart LR
+  b["1 · Build, tests<br/>y cobertura"] --> s["3a · SonarQube"]
+  b --> i["4 · Imagen<br/>+ Trivy"]
+  g["2 · Gitleaks"] --> i
+  s --> i
+  c["3b · Auditoría de<br/>cumplimiento"] --> i
+  i --> d["5 · Deploy K8s<br/>+ verificación"]
+```
+
+Cada job es un *gate*. Con `needs`, el job 4 espera a los jobs 1, 2, 3a y 3b, y el job 5 espera al job 4. Si cualquiera falla, los siguientes no se ejecutan: la imagen no se publica y nada llega al despliegue. SonarQube solo corre en los PR y en `main`, porque el plan gratis de SonarCloud no analiza otras ramas; cuando se salta a propósito (push a `develop` o PRs de Dependabot), el resto del pipeline sigue.
+
+**Caso real: Trivy bloqueó la imagen por vulnerabilidades críticas**
+
+| Ejecución | Commit | Resultado | Qué pasó |
+|---|---|---|---|
+| [#1](https://github.com/SYST3M644/devops_007d_ols/actions/runs/45261127840) | `45e21ac` | ❌ Job 4 | Trivy encontró **10 CVE CRITICAL** (8 en Tomcat y 2 en Spring Web MVC; 39 contando las HIGH), que venían con Spring Boot 4.0.6. La imagen no se publicó ni se desplegó |
+| [#2](https://github.com/SYST3M644/devops_007d_ols/actions/runs/45263162286) | `8797e54` | Cancelada | Se actualizó Spring Boot a 4.0.9. La ejecución se canceló porque llegó un push más nuevo |
+| [#3](https://github.com/SYST3M644/devops_007d_ols/actions/runs/45263706130) | `4040896` | ❌ Job 5 | La imagen ya pasó Trivy, pero falló la verificación "Prometheus: MySQL UP (exporter)" |
+| [#4](https://github.com/SYST3M644/devops_007d_ols/actions/runs/45267002169) | `b11e4d7` | ❌ Job 5 | Se fijó MySQL en 8.4.10; el exporter seguía sin conectarse |
+| [#5](https://github.com/SYST3M644/devops_007d_ols/actions/runs/45269173518) | `a4f567b` | ✅ | El exporter usa el usuario de la app y todo el pipeline pasa |
+
+## Problemas encontrados y cómo se resolvieron
+
+Problemas registrados en los commits: 
+
+- Trivy bloqueó la imagen por 10 CVE CRITICAL de Spring Boot 4.0.6 (se actualizó a 4.0.9 y después a 4.1.3).
+- Spring Boot 4.2.0, propuesto por Dependabot, no es compatible con Spring Cloud 2025.1.x y la app no arrancaba (se usó 4.1.3, la última versión compatible).
+- Con `mysql:8.4`, cada despliegue podía bajar una versión distinta (se fijó `mysql:8.4.10`).
+- El exporter de MySQL no se conectaba y fallaba la verificación (ahora usa el usuario de la app).
+- `verificar.sh` fallaba si los puertos estaban ocupados por `paneles.sh` (ahora avisa y se detiene).
+- Los scripts `.sh` fallaban por los saltos de línea de Windows (se forzó LF con `.gitattributes`).
+- SonarQube falló en el push a `develop` porque el plan gratis solo analiza `main` y los PR (ahora corre solo ahí).
+
+## Uso de inteligencia artificial
+
+Se utilizo cloude code, para apoyo de teoria y revision de codigo de implementacion de los requerimientos de pauta, al igual nos genero diagramas para evidencia en el README. (cloude code)
+
+Tambien se su maleta de materia de AVA https://campusvirtual.duoc.cl/
+
+## Reflexiones individuales
+
+### Reflexión de Manuel Mora
+
+Yo manuel mora, mi reflexion personal sobre esta ultima experiencia de aprendizaje n°3 de ingenieria DevOps.
+
+realmente me costo entender los conceptos al no tener una cuenta de AWS para cloudwach y no poder practicar de forma constante, pero gracias a las tecnologias , grabaciones de clases y maleta de ava, pude escalar mis conocimientos desarrollando kubernetes local y configurar un despliegue local talvez no fue una forma de buenas practicas, pero para engrandecer mis conocimientos, junto mi compañero abel aylas mi compañero de trabajo, he implementado esta evalucion todo lo necesario, logs, trazas, metricas. fortaleciendome para mi proximo año.
+
+### Reflexión de Abel Aylas
+
+Yo, Abel Aylas, tuve un problema con develop: quedo en rojo porque el plan gratis de SonarCloud no analiza otras ramas, y aprendi que sonar solo analiza el main.
+
+Tambien tuve un error con la version de spring boot. Me ayude un poco con IA para encontrar y resolver el bug, y cambiando a una version mas actual de spring boot, la 4.1.3, trabajo mejor y sin errores.
+
+El trivy nos detecto vulnerabilidades y el pipeline no lo dejo pasar porque encontro esa falla. Eso es bueno, porque nos hace ver que nuestro sistema funciona y esta apto para detectar vulnerabilidades.
 
