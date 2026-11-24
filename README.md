@@ -601,7 +601,7 @@ Todos los servicios son `ClusterIP`: no quedan expuestos fuera del cluster. Para
 | Amazon ECR | Registro de imágenes | GitHub Container Registry (`ghcr.io`) |
 | AWS Secrets Manager | Secretos | Secrets de Kubernetes y GitHub Secrets |
 
-> **Importante no se utilizo proceso en la nube, por simplemente la justificacion, no nos encontrabamos con credenciales y ademas si es un sistema de costeo** 
+Importante no se utilizo proceso en la nube, por simplemente la justificacion, no nos encontrabamos con credenciales y ademas si es un sistema de costeo
 
 ## IE1: Monitoreo y logs
 
@@ -786,17 +786,18 @@ Problemas registrados en los commits:
 - SonarQube falló en el push a `develop` porque el plan gratis solo analiza `main` y los PR (ahora corre solo ahí).
 
 ## Uso de inteligencia artificial
-** Se utilizo cloude code, para apoyo de teoria y revision de codigo de implementacion de los requerimientos de pauta, al igual nos genero diagramas para evidencia en el README. (cloude code)**
-** Tambien se su maleta de materia de AVA https://campusvirtual.duoc.cl/ **
-> 
+
+Se utilizo cloude code, para apoyo de teoria y revision de codigo de implementacion de los requerimientos de pauta, al igual nos genero diagramas para evidencia en el README. (cloude code)
+
+Tambien se su maleta de materia de AVA https://campusvirtual.duoc.cl/
+
 ## Reflexiones individuales
 
 ### Reflexión de Manuel Mora
 
-> **Yo manuel mora, mi reflexion personal sobre esta ultima experiencia de aprendizaje n°3 de ingenieria DevOps.
-realmente me costo entender los conceptos al no tener una cuenta de AWS para cloudwach y no poder practicar de forma constante, pero gracias a las tecnologias , grabaciones de clases y maleta de ava, pude escalar mis conocimientos
-> desarrollando kubernetes local y configurar un despliegue local talvez no fue una forma de buenas practicas, pero para engrandecer mis conocimientos, junto mi compañero abel aylas mi compañero de trabajo, he implementado esta evalucion todo lo necesario, logs, trazas, metricas. fortaleciendome para mi proximo año.
->  **
+Yo manuel mora, mi reflexion personal sobre esta ultima experiencia de aprendizaje n°3 de ingenieria DevOps.
+
+realmente me costo entender los conceptos al no tener una cuenta de AWS para cloudwach y no poder practicar de forma constante, pero gracias a las tecnologias , grabaciones de clases y maleta de ava, pude escalar mis conocimientos desarrollando kubernetes local y configurar un despliegue local talvez no fue una forma de buenas practicas, pero para engrandecer mis conocimientos, junto mi compañero abel aylas mi compañero de trabajo, he implementado esta evalucion todo lo necesario, logs, trazas, metricas. fortaleciendome para mi proximo año.
 
 ### Reflexión de Abel Aylas
 
