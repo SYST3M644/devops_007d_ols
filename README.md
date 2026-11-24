@@ -601,7 +601,7 @@ Todos los servicios son `ClusterIP`: no quedan expuestos fuera del cluster. Para
 | Amazon ECR | Registro de imágenes | GitHub Container Registry (`ghcr.io`) |
 | AWS Secrets Manager | Secretos | Secrets de Kubernetes y GitHub Secrets |
 
-> ✍️ **Pendiente (lo escribe el equipo, sin IA):** por qué no se usó la nube y por qué estas herramientas sirven como reemplazo.
+> **Importante no se utilizo proceso en la nube, por simplemente la justificacion, no nos encontrabamos con credenciales y ademas si es un sistema de costeo** 
 
 ## IE1: Monitoreo y logs
 
@@ -640,8 +640,6 @@ Las rutas `/actuator` quedan fuera de las trazas y de la métrica de peticiones 
 | `TasaErrores4xxAlta` | Más del 20% de las peticiones terminan en 4xx durante 2 min | warning |
 | `LatenciaP95Alta` | El p95 supera 1 segundo durante 5 min | warning |
 | `MemoriaHeapAlta` | La JVM usa más del 90% del heap durante 5 min | warning |
-
-> 📷 **Capturas pendientes:** dashboard de Grafana, Prometheus (Status → Targets y Alerts), Loki con logs WARN/ERROR y una traza en Jaeger.
 
 ## IE2: Despliegue en Kubernetes
 
@@ -704,8 +702,6 @@ Requiere Docker Desktop con Kubernetes activado y Git Bash. Desde la raíz del r
 - **Probes:** `startupProbe` y `livenessProbe` en `/actuator/health/liveness`; `readinessProbe` en `/actuator/health/readiness`, que solo responde UP si la base de datos también responde.
 - **Recursos:** pide 100m de CPU y 384 Mi de memoria, con límites de 1 CPU y 512 Mi. La JVM usa como máximo el 60% de la memoria para el heap (`-XX:MaxRAMPercentage=60.0`).
 
-> 📷 **Capturas pendientes:** job 5 en verde con su resumen y `kubectl get pods -A`.
-
 ## IE3: Dashboards
 
 | Dónde | Qué se ve |
@@ -730,8 +726,6 @@ Requiere Docker Desktop con Kubernetes activado y Git Bash. Desde la raíz del r
 | Resumen del pipeline | Cobertura, vulnerabilidades y tiempo de despliegue | ✍️ |
 | Trivy y SonarQube | Vulnerabilidades y calidad antes de desplegar | ✍️ |
 
-> ✍️ **Pendiente (lo escribe el equipo, sin IA):** completar la última columna con sus palabras. Por ejemplo: qué harían si el p95 sube después de un despliegue.
-
 ## IE5: Políticas de cumplimiento
 
 | Política | Herramienta | Qué controla | ¿Bloquea? |
@@ -754,8 +748,6 @@ Requiere Docker Desktop con Kubernetes activado y Git Bash. Desde la raíz del r
 - `allowPrivilegeEscalation: false` y `capabilities: drop: ["ALL"]`: sin forma de ganar más permisos.
 - `seccompProfile: RuntimeDefault`: limita las llamadas al sistema operativo.
 - Las contraseñas de MySQL y Grafana se generan al azar al crear el entorno y se guardan como Secrets: nunca están en el repositorio.
-
-> 📷 **Captura pendiente:** ruleset de la rama `main`.
 
 ## IE6: El pipeline se detiene ante fallas
 
@@ -781,11 +773,9 @@ Cada job es un *gate*. Con `needs`, el job 4 espera a los jobs 1, 2, 3a y 3b, y 
 | [#4](https://github.com/SYST3M644/devops_007d_ols/actions/runs/45267002169) | `b11e4d7` | ❌ Job 5 | Se fijó MySQL en 8.4.10; el exporter seguía sin conectarse |
 | [#5](https://github.com/SYST3M644/devops_007d_ols/actions/runs/45269173518) | `a4f567b` | ✅ | El exporter usa el usuario de la app y todo el pipeline pasa |
 
-> 📷 **Capturas pendientes:** la ejecución bloqueada por Trivy y la ejecución en verde.
-
 ## Problemas encontrados y cómo se resolvieron
 
-Problemas registrados en los commits y en el historial del pipeline:
+Problemas registrados en los commits: 
 
 - Trivy bloqueó la imagen por 10 CVE CRITICAL de Spring Boot 4.0.6 (se actualizó a 4.0.9).
 - Con `mysql:8.4`, cada despliegue podía bajar una versión distinta (se fijó `mysql:8.4.10`).
@@ -794,17 +784,18 @@ Problemas registrados en los commits y en el historial del pipeline:
 - Los scripts `.sh` fallaban por los saltos de línea de Windows (se forzó LF con `.gitattributes`).
 - SonarQube falló en el push a `develop` porque el plan gratis solo analiza `main` y los PR (ahora corre solo ahí).
 
-> ✍️ **Pendiente (lo escribe el equipo, sin IA):** elegir 3 o 4 de estos problemas y explicar con sus palabras qué pasó y cómo lo resolvieron.
-
 ## Uso de inteligencia artificial
-
-> ✍️ **Pendiente (lo escribe el equipo, sin IA):** qué herramienta usaron (Claude), para qué la usaron y qué hicieron ustedes. Declarar que los diagramas de Arquitectura e IE6 se hicieron con apoyo de IA. Citar según [bibliotecas.duoc.cl/ia](https://bibliotecas.duoc.cl/ia).
-
+** Se utilizo cloude code, para apoyo de teoria y revision de codigo de implementacion de los requerimientos de pauta, al igual nos genero diagramas para evidencia en el README. (cloude code)**
+** Tambien se su maleta de materia de AVA https://campusvirtual.duoc.cl/ **
+> 
 ## Reflexiones individuales
 
 ### Reflexión de Manuel Mora
 
-> ✍️ **Pendiente (sin IA).**
+> **Yo manuel mora, mi reflexion personal sobre esta ultima experiencia de aprendizaje n°3 de ingenieria DevOps.
+realmente me costo entender los conceptos al no tener una cuenta de AWS para cloudwach y no poder practicar de forma constante, pero gracias a las tecnologias , grabaciones de clases y maleta de ava, pude escalar mis conocimientos
+> desarrollando kubernetes local y configurar un despliegue local talvez no fue una forma de buenas practicas, pero para engrandecer mis conocimientos, junto mi compañero abel aylas mi compañero de trabajo, he implementado esta evalucion todo lo necesario, logs, trazas, metricas. fortaleciendome para mi proximo año.
+>  **
 
 ### Reflexión de Abel Aylas
 
